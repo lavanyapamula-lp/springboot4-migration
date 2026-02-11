@@ -210,6 +210,39 @@ note: "[MANUAL-REVIEW] Critical for applications using distributed caches with J
 ```yaml
 scope: "**/pom.xml"
 priority: CRITICAL
+description: |
+  This project uses a custom parent POM (spring-boot-mongodb-parent) which itself
+  inherits from spring-boot-starter-parent. Update the child POM to reference
+  the new parent version that targets Spring Boot 4.0.0.
+find_regex: |
+  <parent>\s*
+    <groupId>com\.example</groupId>\s*
+    <artifactId>spring-boot-mongodb-parent</artifactId>\s*
+    <version>1\.0\.0-SNAPSHOT</version>
+replace: |
+  <parent>
+    <groupId>com.example</groupId>
+    <artifactId>spring-boot-mongodb-parent</artifactId>
+    <version>2.0.0-SNAPSHOT</version>
+pre_requisite: |
+  The parent POM (spring-boot-mongodb-parent:2.0.0-SNAPSHOT) must be installed first:
+    mvn install -f <path-to>/spring-boot-mongodb-parent/pom.xml
+  The parent POM inherits from spring-boot-starter-parent:4.0.0 and sets:
+    - java.version=25
+    - maven.compiler.source/target/release=25
+    - lombok.version=1.18.40 (with annotationProcessorPaths)
+    - Maven Toolchains for JDK 25
+validate: "mvn dependency:tree resolves without conflicts"
+```
+
+### Rule 3.2 — Parent POM: spring-boot-mongodb-parent Configuration
+
+```yaml
+scope: "spring-boot-mongodb-parent/pom.xml"
+priority: CRITICAL
+description: |
+  The custom parent POM must inherit from spring-boot-starter-parent:4.0.0
+  and configure Java 25 compilation, Lombok, and toolchains.
 find_regex: |
   <parent>\s*
     <groupId>org\.springframework\.boot</groupId>\s*
@@ -220,23 +253,17 @@ replace: |
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-parent</artifactId>
     <version>4.0.0</version>
-validate: "mvn dependency:tree resolves without conflicts"
-```
-
-### Rule 3.2 — Maven: Update BOM (if not using parent)
-
-```yaml
-scope: "**/pom.xml"
-priority: CRITICAL
-condition: "Project uses spring-boot-dependencies BOM instead of parent"
-find_regex: |
-  <groupId>org\.springframework\.boot</groupId>\s*
-  <artifactId>spring-boot-dependencies</artifactId>\s*
-  <version>3\.\d+\.\d+</version>
-replace: |
-  <groupId>org.springframework.boot</groupId>
-  <artifactId>spring-boot-dependencies</artifactId>
-  <version>4.0.0</version>
+additional_changes:
+  - property: "spring-boot.version" → "4.0.0"
+  - property: "java.version" → "25"
+  - property: "maven.compiler.source" → "25"
+  - property: "maven.compiler.target" → "25"
+  - property: "lombok.version" → "1.18.40" (required for Java 25)
+  - plugin: maven-compiler-plugin → add Lombok to annotationProcessorPaths
+  - plugin: maven-toolchains-plugin → JDK version 25
+  - starters: spring-boot-starter-webmvc (replaces spring-boot-starter-web)
+  - test starters: spring-boot-starter-webmvc-test, spring-boot-starter-data-mongodb-test
+validate: "mvn install on parent succeeds; child project resolves all dependencies"
 ```
 
 ### Rule 3.3 — Gradle: Update Spring Boot Plugin
