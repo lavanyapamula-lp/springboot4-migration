@@ -53,6 +53,12 @@ on:
         default: true
         type: boolean
 
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+  workflows: write   # important if you touch workflow files
+
 # ── Environment ───────────────────────────────────────────────────────────────
 env:
   MIGRATION_BRANCH: "automated/migrate-springboot4-java${{ inputs.java_version }}"
@@ -180,34 +186,67 @@ jobs:
           echo "══════════════════════════════════════════"
 
           BUILD_TOOL="${{ steps.detect.outputs.build_tool }}"
+          SB_VERSION="${{ inputs.spring_boot_version }}"
+          J_VERSION="${{ inputs.java_version }}"
 
           if [[ "$BUILD_TOOL" == "maven" ]]; then
-            # Java version
-            sed -i 's|<java.version>21</java.version>|<java.version>${{ inputs.java_version }}</java.version>|g' pom.xml
-            sed -i 's|<java.version>17</java.version>|<java.version>${{ inputs.java_version }}</java.version>|g' pom.xml
-            sed -i 's|<maven.compiler.source>21</maven.compiler.source>|<maven.compiler.source>${{ inputs.java_version }}</maven.compiler.source>|g' pom.xml
-            sed -i 's|<maven.compiler.target>21</maven.compiler.target>|<maven.compiler.target>${{ inputs.java_version }}</maven.compiler.target>|g' pom.xml
-            sed -i 's|<release>21</release>|<release>${{ inputs.java_version }}</release>|g' pom.xml
 
-            # Spring Boot parent
-            perl -i -0pe 's|(<artifactId>spring-boot-starter-parent</artifactId>\s*<version>)3\.\d+\.\d+[^<]*(</version>)|${1}${{ inputs.spring_boot_version }}${2}|g' pom.xml
+            # ── Java version (ALL pom.xml files for multi-module) ──
+            find . -name "pom.xml" -not -path "./.git/*" -exec sed -i \
+              "s|<java.version>21</java.version>|<java.version>${J_VERSION}</java.version>|g; \
+               s|<java.version>17</java.version>|<java.version>${J_VERSION}</java.version>|g; \
+               s|<maven.compiler.source>21</maven.compiler.source>|<maven.compiler.source>${J_VERSION}</maven.compiler.source>|g; \
+               s|<maven.compiler.target>21</maven.compiler.target>|<maven.compiler.target>${J_VERSION}</maven.compiler.target>|g; \
+               s|<release>21</release>|<release>${J_VERSION}</release>|g" {} +
+            echo "  ✔ Java version updated in all pom.xml files"
 
-            # Spring Boot BOM
-            perl -i -0pe 's|(<artifactId>spring-boot-dependencies</artifactId>\s*<version>)3\.\d+\.\d+[^<]*(</version>)|${1}${{ inputs.spring_boot_version }}${2}|g' pom.xml
+            # ── Spring Boot parent version ─────────────────────────
+            perl -i -0pe "s|(<artifactId>spring-boot-starter-parent</artifactId>\\s*<version>)3\\.\\d+\\.\\d+[^<]*(</version>)|\${1}${SB_VERSION}\${2}|g" pom.xml
+            echo "  ✔ Spring Boot parent version updated"
 
-            # Starter renames
-            sed -i 's|spring-boot-starter-web<|spring-boot-starter-webmvc<|g' pom.xml
-            sed -i 's|spring-boot-starter-aop<|spring-boot-starter-aspectj<|g' pom.xml
-
-            # Remove JUnit vintage
-            perl -i -0pe 's|<exclusion>\s*<groupId>org\.junit\.vintage</groupId>\s*<artifactId>junit-vintage-engine</artifactId>\s*</exclusion>||g' pom.xml
-
-            # Also handle multi-module projects
+            # ── Spring Boot BOM version ────────────────────────────
             find . -name "pom.xml" -not -path "./.git/*" | while read -r pom; do
-              sed -i 's|<java.version>21</java.version>|<java.version>${{ inputs.java_version }}</java.version>|g' "$pom"
-              sed -i 's|spring-boot-starter-web<|spring-boot-starter-webmvc<|g' "$pom"
-              sed -i 's|spring-boot-starter-aop<|spring-boot-starter-aspectj<|g' "$pom"
+              perl -i -0pe "s|(<artifactId>spring-boot-dependencies</artifactId>\\s*<version>)3\\.\\d+\\.\\d+[^<]*(</version>)|\${1}${SB_VERSION}\${2}|g" "$pom" 2>/dev/null || true
             done
+            echo "  ✔ Spring Boot BOM version updated (if present)"
+
+            # ── Spring Boot version properties ─────────────────────
+            find . -name "pom.xml" -not -path "./.git/*" | while read -r pom; do
+              perl -i -pe "s|(<spring-boot\\.version>)3\\.\\d+\\.\\d+[^<]*(</spring-boot\\.version>)|\${1}${SB_VERSION}\${2}|g" "$pom" 2>/dev/null || true
+              perl -i -pe "s|(<spring\\.boot\\.version>)3\\.\\d+\\.\\d+[^<]*(</spring\\.boot\\.version>)|\${1}${SB_VERSION}\${2}|g" "$pom" 2>/dev/null || true
+              perl -i -pe "s|(<springboot\\.version>)3\\.\\d+\\.\\d+[^<]*(</springboot\\.version>)|\${1}${SB_VERSION}\${2}|g" "$pom" 2>/dev/null || true
+            done
+            echo "  ✔ Spring Boot version properties updated"
+
+            # ── Explicit Spring Boot dependency versions ────────────
+            find . -name "pom.xml" -not -path "./.git/*" | while read -r pom; do
+              perl -i -0pe "s|(<groupId>org\\.springframework\\.boot</groupId>\\s*<artifactId>[^<]+</artifactId>\\s*<version>)3\\.\\d+\\.\\d+[^<]*(</version>)|\${1}${SB_VERSION}\${2}|g" "$pom" 2>/dev/null || true
+            done
+            echo "  ✔ Explicit Spring Boot dependency versions updated"
+
+            # ── Rename starters (ALL pom.xml, match full </artifactId> tag) ─
+            find . -name "pom.xml" -not -path "./.git/*" -exec sed -i \
+              's|spring-boot-starter-web</artifactId>|spring-boot-starter-webmvc</artifactId>|g; \
+               s|spring-boot-starter-aop</artifactId>|spring-boot-starter-aspectj</artifactId>|g' {} +
+            echo "  ✔ Starters renamed (web→webmvc, aop→aspectj)"
+
+            # ── Remove JUnit vintage exclusion ─────────────────────
+            find . -name "pom.xml" -not -path "./.git/*" | while read -r pom; do
+              perl -i -0pe 's|<exclusion>\s*<groupId>org\.junit\.vintage</groupId>\s*<artifactId>junit-vintage-engine</artifactId>\s*</exclusion>||g' "$pom"
+            done
+            echo "  ✔ JUnit vintage exclusions removed"
+
+            # ── Warn about missing BOM ─────────────────────────────
+            if ! grep -rq "spring-boot-starter-parent\|spring-boot-dependencies" pom.xml 2>/dev/null; then
+              echo "::warning::No spring-boot-starter-parent or spring-boot-dependencies BOM found in root pom.xml. Ensure your parent POM or dependencyManagement provides Spring Boot ${SB_VERSION} version management. Without this, renamed starters may fail to resolve."
+            fi
+
+            # ── Scan for remaining 3.x Spring versions ─────────────
+            SB3_REMAINING=$(grep -r "<version>3\." --include="pom.xml" . 2>/dev/null | grep -i "spring" | wc -l || echo "0")
+            if [[ "$SB3_REMAINING" -gt 0 ]]; then
+              echo "::warning::Found ${SB3_REMAINING} remaining Spring 3.x version references in pom.xml files. Review manually."
+              grep -r "<version>3\." --include="pom.xml" . 2>/dev/null | grep -i "spring" | head -5
+            fi
 
             echo "✅ Maven build files updated"
 
