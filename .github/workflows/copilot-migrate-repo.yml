@@ -12,6 +12,13 @@ jobs:
   trigger-copilot-migration:
     runs-on: ubuntu-latest
     steps:
+      - name: "🏷️ Ensure labels exist on target repo"
+        env:
+          GH_TOKEN: ${{ secrets.TARGET_REPO_TOKEN }}
+        run: |
+          gh label create "migration" --repo "$TARGET_REPO" --color "0E8A16" --description "Spring Boot migration task" --force
+          gh label create "java-25"   --repo "$TARGET_REPO" --color "1D76DB" --description "Java 25 upgrade" --force
+
       - name: Download Migration Playbook
         id: fetch-playbook
         run: |
@@ -40,7 +47,7 @@ jobs:
             --repo "$REPO" \
             --title "Maintenance: Migrate to Spring Boot 4 & Java 25" \
             --body-file migration-task.md \
-            --label "migration" \
+            # --label "migration" \
             --label "java-25" 
             
           # Note on Assigning @copilot: 
