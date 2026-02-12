@@ -46,26 +46,18 @@ jobs:
           OWNER=$(echo "$TARGET_REPO" | cut -d'/' -f1)
           REPO=$(echo "$TARGET_REPO" | cut -d'/' -f2)
 
-          # 1. Get Copilot bot ID
-          COPILOT_ID=$(gh api graphql \
-            -H "GraphQL-Features: issues_copilot_assignment_api_support,coding_agent_model_selection" \
-            -f query="
-              query {
-                repository(owner: \"${OWNER}\", name: \"${REPO}\") {
-                  suggestedActors(first: 20) {
-                    nodes {
-                      ... on Bot {
-                        id
-                        login
-                      }
-                    }
-                  }
-                }
-              }
-            " --jq '.data.repository.suggestedActors.nodes[] | select(.login == "copilot-swe-agent") | .id')
+          # 1. Get Copilot bot ID via REST
+          COPILOT_ID=$(gh api "repos/${OWNER}/${REPO}/assignees" \
+            --paginate --jq '.[] | select(.login == "copilot-swe-agent") | .node_id')
 
           if [ -z "$COPILOT_ID" ]; then
-            echo "::error::copilot-swe-agent not found on ${TARGET_REPO}"
+            # Try the alternative bot name
+            COPILOT_ID=$(gh api "repos/${OWNER}/${REPO}/assignees" \
+              --paginate --jq '.[] | select(.login | test("copilot")) | .node_id')
+          fi
+
+          if [ -z "$COPILOT_ID" ]; then
+            echo "::error::Copilot agent not found in assignees for ${TARGET_REPO}"
             echo "Enable it: Repo Settings → Copilot → Coding agent → Enabled"
             exit 1
           fi
