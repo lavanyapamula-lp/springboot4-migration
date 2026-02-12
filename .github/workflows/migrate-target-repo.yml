@@ -1,628 +1,93 @@
-# ══════════════════════════════════════════════════════════════════════════════
-# migrate-target-repo.yml
-# Centralized migration workflow — runs against ANY target repository
-# ══════════════════════════════════════════════════════════════════════════════
-#
-# This workflow lives in the MIGRATION repo (e.g., your-org/springboot4-migration).
-# It clones a TARGET repo, runs the full migration, and creates a PR on the target.
-#
-# ══════════════════════════════════════════════════════════════════════════════
-
 name: "🚀 Migrate Target Repository"
 
 on:
   workflow_dispatch:
     inputs:
-      target_repository:
-        description: "Target repository (owner/repo format, e.g., your-org/user-service)"
+      target_repo:
+        description: "Repo to migrate (org/repo)"
         required: true
-        type: string
-      target_branch:
-        description: "Branch to migrate from"
+      parent_repo:
+        description: "Repository for the Parent POM"
         required: true
-        default: "main"
-        type: string
-      spring_boot_version:
-        description: "Target Spring Boot version"
+        default: "Siri1990/spring-boot-mongodb-parent" # 👈 Adjust this to your actual parent repo
+      parent_branch:
+        description: "Branch of the Parent POM"
         required: true
-        default: "4.0.0"
-        type: string
-      java_version:
-        description: "Target Java version"
+        default: "migration-2.0.0" # 👈 The branch where 2.0.0-SNAPSHOT exists
+      parent_version:
+        description: "New version of the Parent Library"
         required: true
-        default: "25"
-        type: string
-      run_openrewrite:
-        description: "Run OpenRewrite recipes (deep AST transforms)"
-        required: true
-        default: true
-        type: boolean
-      run_tests:
-        description: "Run test suite after migration"
-        required: true
-        default: true
-        type: boolean
-      dry_run:
-        description: "Dry run only (no PR created, changes shown in logs)"
-        required: true
-        default: false
-        type: boolean
-      copy_copilot_instructions:
-        description: "Copy .github/copilot-instructions.md to target repo"
-        required: true
-        default: true
-        type: boolean
-
-permissions:
-  contents: write
-  pull-requests: write
-  issues: write
-  workflows: write   # important if you touch workflow files
-
-# ── Environment ───────────────────────────────────────────────────────────────
-env:
-  MIGRATION_BRANCH: "automated/migrate-springboot4-java${{ inputs.java_version }}"
-  TARGET_REPO: ${{ inputs.target_repository }}
-  TARGET_BRANCH: ${{ inputs.target_branch }}
-  SPRING_BOOT_VERSION: ${{ inputs.spring_boot_version }}
-  JAVA_VERSION: ${{ inputs.java_version }}
+        default: "2.0.0-SNAPSHOT"
 
 jobs:
   migrate:
-    name: "⚙️ Migrate ${{ inputs.target_repository }}"
     runs-on: ubuntu-latest
-
     steps:
-      # ── Step 1: Checkout MIGRATION repo (this repo — has all scripts) ────
-      - name: "📦 Checkout migration toolkit"
+      - name: Checkout Migration Toolkit
         uses: actions/checkout@v4
         with:
           path: migration-toolkit
 
-      # ── Step 2: Generate token for target repo access ────────────────────
-      # Option A: Use PAT (simple)
-      - name: "🔑 Configure target repo access (PAT)"
-        if: ${{ !vars.USE_GITHUB_APP }}
-        run: echo "TARGET_TOKEN=${{ secrets.TARGET_REPO_TOKEN }}" >> "$GITHUB_ENV"
+      # ── NEW STEP: Checkout Parent Library ──────────────────────────────
+      - name: Checkout Parent Library
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.parent_repo }}
+          ref: ${{ inputs.parent_branch }}
+          token: ${{ secrets.PAT_TOKEN }}
+          path: parent-library
 
-      # Option B: Use GitHub App (uncomment if using App-based auth)
-      # - name: "🔑 Generate GitHub App token"
-      #   if: ${{ vars.USE_GITHUB_APP == 'true' }}
-      #   id: app-token
-      #   uses: actions/create-github-app-token@v1
-      #   with:
-      #     app-id: ${{ secrets.APP_ID }}
-      #     private-key: ${{ secrets.APP_PRIVATE_KEY }}
-      #     owner: ${{ github.repository_owner }}
-      #     repositories: ${{ inputs.target_repository }}
-      #
-      # - name: "🔑 Set app token"
-      #   if: ${{ vars.USE_GITHUB_APP == 'true' }}
-      #   run: echo "TARGET_TOKEN=${{ steps.app-token.outputs.token }}" >> "$GITHUB_ENV"
-
-      # ── Step 3: Clone the TARGET repo ────────────────────────────────────
-      - name: "📥 Clone target repository: ${{ inputs.target_repository }}"
+      # ── NEW STEP: Install Parent Library Locally ───────────────────────
+      - name: Install Parent POM
         run: |
-          git clone "https://x-access-token:${TARGET_TOKEN}@github.com/${{ inputs.target_repository }}.git" target-repo
-          cd target-repo
-          git checkout "${{ inputs.target_branch }}"
-          echo "✅ Cloned ${{ inputs.target_repository }} @ ${{ inputs.target_branch }}"
-          echo "📊 Java files: $(find src -name '*.java' 2>/dev/null | wc -l)"
+          cd parent-library
+          mvn clean install -N  # -N (Non-recursive) installs just the parent POM fast
+          echo "✅ Installed Parent POM to local .m2 cache"
 
-      # ── Step 4: Setup Java ───────────────────────────────────────────────
-      - name: "☕ Setup Java ${{ inputs.java_version }}"
+      - name: Checkout Target App
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.target_repo }}
+          token: ${{ secrets.PAT_TOKEN }}
+          path: target-app
+
+      - name: Setup Java 25
         uses: actions/setup-java@v4
         with:
-          distribution: "temurin"
-          java-version: ${{ inputs.java_version }}
+          java-version: '25'
+          distribution: 'temurin'
+          cache: 'maven'
 
-      - name: "☕ Verify Java"
-        run: java -version
-
-      # ── Step 5: Detect build tool ────────────────────────────────────────
-      - name: "🔍 Detect build tool"
-        id: detect
-        working-directory: target-repo
+      # ── STEP 1: Update Parent Reference ────────────────────────────────
+      - name: "📦 Update Custom Parent Library"
+        working-directory: target-app
         run: |
-          if [[ -f "pom.xml" ]]; then
-            echo "build_tool=maven" >> "$GITHUB_OUTPUT"
-            echo "✅ Maven project detected"
-
-            CURRENT_VERSION=$(grep -A2 'spring-boot-starter-parent' pom.xml | grep '<version>' | sed 's/.*<version>\(.*\)<\/version>.*/\1/' | head -1 || echo "unknown")
-            echo "current_version=${CURRENT_VERSION}" >> "$GITHUB_OUTPUT"
-            echo "📌 Current Spring Boot version: ${CURRENT_VERSION}"
-
-          elif [[ -f "build.gradle" ]] || [[ -f "build.gradle.kts" ]]; then
-            echo "build_tool=gradle" >> "$GITHUB_OUTPUT"
-            echo "✅ Gradle project detected"
-            echo "current_version=unknown" >> "$GITHUB_OUTPUT"
-          else
-            echo "❌ No pom.xml or build.gradle found in target repo"
-            exit 1
-          fi
-
-      # ── Step 6: Pre-migration scan ──────────────────────────────────────
-      - name: "📊 Pre-migration scan"
-        id: prescan
-        working-directory: target-repo
-        run: |
-          echo "=== Pre-Migration Inventory ==="
-
-          JAVAX_COUNT=$(grep -r "import javax\." src/ --include="*.java" 2>/dev/null | grep -v "javax\.annotation\.\|javax\.crypto\.\|javax\.net\.\|javax\.xml\." | wc -l || echo "0")
-          echo "javax.* imports: ${JAVAX_COUNT}"
-          echo "javax_count=${JAVAX_COUNT}" >> "$GITHUB_OUTPUT"
-
-          JACKSON2_COUNT=$(grep -r "import com\.fasterxml\.jackson\." src/ --include="*.java" 2>/dev/null | grep -v "annotation" | wc -l || echo "0")
-          echo "Jackson 2 imports: ${JACKSON2_COUNT}"
-          echo "jackson2_count=${JACKSON2_COUNT}" >> "$GITHUB_OUTPUT"
-
-          MOCKBEAN_COUNT=$(grep -r "@MockBean\|@SpyBean" src/ --include="*.java" 2>/dev/null | wc -l || echo "0")
-          echo "@MockBean/@SpyBean: ${MOCKBEAN_COUNT}"
-          echo "mockbean_count=${MOCKBEAN_COUNT}" >> "$GITHUB_OUTPUT"
-
-          JUNIT4_COUNT=$(grep -r "import org\.junit\." src/ --include="*.java" 2>/dev/null | grep -v "jupiter" | wc -l || echo "0")
-          echo "JUnit 4 imports: ${JUNIT4_COUNT}"
-          echo "junit4_count=${JUNIT4_COUNT}" >> "$GITHUB_OUTPUT"
-
-          JAVA_FILES=$(find src -name "*.java" 2>/dev/null | wc -l)
-          echo "Total Java files: ${JAVA_FILES}"
-          echo "java_files=${JAVA_FILES}" >> "$GITHUB_OUTPUT"
-
-      # ── Step 7: Create migration branch on target ────────────────────────
-      - name: "🌿 Create migration branch"
-        working-directory: target-repo
-        run: |
-          git config user.name "springboot4-migration[bot]"
-          git config user.email "springboot4-migration[bot]@users.noreply.github.com"
-          git checkout -b "${{ env.MIGRATION_BRANCH }}"
-
-      # ── Step 8: Copy migration script and run ────────────────────────────
-      - name: "⚙️ Phase 1: Build files"
-        working-directory: target-repo
-        run: |
-          echo "══════════════════════════════════════════"
-          echo "  PHASE 1: BUILD FILES"
-          echo "  Target: ${{ inputs.target_repository }}"
-          echo "══════════════════════════════════════════"
-
-          BUILD_TOOL="${{ steps.detect.outputs.build_tool }}"
-          SB_VERSION="${{ inputs.spring_boot_version }}"
-          J_VERSION="${{ inputs.java_version }}"
-
-          if [[ "$BUILD_TOOL" == "maven" ]]; then
-
-            # ── Java version (ALL pom.xml files for multi-module) ──
-            find . -name "pom.xml" -not -path "./.git/*" -exec sed -i \
-              "s|<java.version>21</java.version>|<java.version>${J_VERSION}</java.version>|g; \
-               s|<java.version>17</java.version>|<java.version>${J_VERSION}</java.version>|g; \
-               s|<maven.compiler.source>21</maven.compiler.source>|<maven.compiler.source>${J_VERSION}</maven.compiler.source>|g; \
-               s|<maven.compiler.target>21</maven.compiler.target>|<maven.compiler.target>${J_VERSION}</maven.compiler.target>|g; \
-               s|<release>21</release>|<release>${J_VERSION}</release>|g" {} +
-            echo "  ✔ Java version updated in all pom.xml files"
-
-            # ── Spring Boot parent version ─────────────────────────
-            perl -i -0pe "s|(<artifactId>spring-boot-starter-parent</artifactId>\\s*<version>)3\\.\\d+\\.\\d+[^<]*(</version>)|\${1}${SB_VERSION}\${2}|g" pom.xml
-            echo "  ✔ Spring Boot parent version updated"
-
-            # ── Spring Boot BOM version ────────────────────────────
-            find . -name "pom.xml" -not -path "./.git/*" | while read -r pom; do
-              perl -i -0pe "s|(<artifactId>spring-boot-dependencies</artifactId>\\s*<version>)3\\.\\d+\\.\\d+[^<]*(</version>)|\${1}${SB_VERSION}\${2}|g" "$pom" 2>/dev/null || true
-            done
-            echo "  ✔ Spring Boot BOM version updated (if present)"
-
-            # ── Spring Boot version properties ─────────────────────
-            find . -name "pom.xml" -not -path "./.git/*" | while read -r pom; do
-              perl -i -pe "s|(<spring-boot\\.version>)3\\.\\d+\\.\\d+[^<]*(</spring-boot\\.version>)|\${1}${SB_VERSION}\${2}|g" "$pom" 2>/dev/null || true
-              perl -i -pe "s|(<spring\\.boot\\.version>)3\\.\\d+\\.\\d+[^<]*(</spring\\.boot\\.version>)|\${1}${SB_VERSION}\${2}|g" "$pom" 2>/dev/null || true
-              perl -i -pe "s|(<springboot\\.version>)3\\.\\d+\\.\\d+[^<]*(</springboot\\.version>)|\${1}${SB_VERSION}\${2}|g" "$pom" 2>/dev/null || true
-            done
-            echo "  ✔ Spring Boot version properties updated"
-
-            # ── Explicit Spring Boot dependency versions ────────────
-            find . -name "pom.xml" -not -path "./.git/*" | while read -r pom; do
-              perl -i -0pe "s|(<groupId>org\\.springframework\\.boot</groupId>\\s*<artifactId>[^<]+</artifactId>\\s*<version>)3\\.\\d+\\.\\d+[^<]*(</version>)|\${1}${SB_VERSION}\${2}|g" "$pom" 2>/dev/null || true
-            done
-            echo "  ✔ Explicit Spring Boot dependency versions updated"
-
-            # ── Rename starters (ALL pom.xml, match full </artifactId> tag) ─
-            find . -name "pom.xml" -not -path "./.git/*" -exec sed -i \
-              's|spring-boot-starter-web</artifactId>|spring-boot-starter-webmvc</artifactId>|g; \
-               s|spring-boot-starter-aop</artifactId>|spring-boot-starter-aspectj</artifactId>|g' {} +
-            echo "  ✔ Starters renamed (web→webmvc, aop→aspectj)"
-
-            # ── Remove JUnit vintage exclusion ─────────────────────
-            find . -name "pom.xml" -not -path "./.git/*" | while read -r pom; do
-              perl -i -0pe 's|<exclusion>\s*<groupId>org\.junit\.vintage</groupId>\s*<artifactId>junit-vintage-engine</artifactId>\s*</exclusion>||g' "$pom"
-            done
-            echo "  ✔ JUnit vintage exclusions removed"
-
-            # ── Warn about missing BOM ─────────────────────────────
-            if ! grep -rq "spring-boot-starter-parent\|spring-boot-dependencies" pom.xml 2>/dev/null; then
-              echo "::warning::No spring-boot-starter-parent or spring-boot-dependencies BOM found in root pom.xml. Ensure your parent POM or dependencyManagement provides Spring Boot ${SB_VERSION} version management. Without this, renamed starters may fail to resolve."
-            fi
-
-            # ── Scan for remaining 3.x Spring versions ─────────────
-            SB3_REMAINING=$(grep -r "<version>3\." --include="pom.xml" . 2>/dev/null | grep -i "spring" | wc -l || echo "0")
-            if [[ "$SB3_REMAINING" -gt 0 ]]; then
-              echo "::warning::Found ${SB3_REMAINING} remaining Spring 3.x version references in pom.xml files. Review manually."
-              grep -r "<version>3\." --include="pom.xml" . 2>/dev/null | grep -i "spring" | head -5
-            fi
-
-            echo "✅ Maven build files updated"
-
-          elif [[ "$BUILD_TOOL" == "gradle" ]]; then
-            GRADLE_FILE=$(ls build.gradle.kts build.gradle 2>/dev/null | head -1)
-            sed -i "s|JavaVersion.VERSION_21|JavaVersion.VERSION_${{ inputs.java_version }}|g" "$GRADLE_FILE"
-            sed -i "s|JavaVersion.VERSION_17|JavaVersion.VERSION_${{ inputs.java_version }}|g" "$GRADLE_FILE"
-            sed -i "s|JavaLanguageVersion.of(21)|JavaLanguageVersion.of(${{ inputs.java_version }})|g" "$GRADLE_FILE"
-            sed -i "s|JavaLanguageVersion.of(17)|JavaLanguageVersion.of(${{ inputs.java_version }})|g" "$GRADLE_FILE"
-            sed -i "s|spring-boot-starter-web'|spring-boot-starter-webmvc'|g" "$GRADLE_FILE"
-            sed -i "s|spring-boot-starter-web\"|spring-boot-starter-webmvc\"|g" "$GRADLE_FILE"
-            sed -i "s|spring-boot-starter-aop|spring-boot-starter-aspectj|g" "$GRADLE_FILE"
-            echo "✅ Gradle build files updated"
-          fi
-
-      - name: "⚙️ Phase 1: Compile gate"
-        working-directory: target-repo
-        continue-on-error: true
-        id: compile1
-        run: |
-          BUILD_TOOL="${{ steps.detect.outputs.build_tool }}"
-          if [[ "$BUILD_TOOL" == "maven" ]]; then
-            mvn clean compile -DskipTests -B -q 2>&1 && echo "result=passed" >> "$GITHUB_OUTPUT" || echo "result=failed" >> "$GITHUB_OUTPUT"
-          else
-            ./gradlew clean compileJava -q 2>&1 && echo "result=passed" >> "$GITHUB_OUTPUT" || echo "result=failed" >> "$GITHUB_OUTPUT"
-          fi
-
-      # ── Phase 2: Import Rewrites ─────────────────────────────────────────
-      - name: "⚙️ Phase 2: Import and annotation rewrites"
-        working-directory: target-repo
-        run: |
-          echo "══════════════════════════════════════════"
-          echo "  PHASE 2: IMPORT REWRITES"
-          echo "══════════════════════════════════════════"
-
-          # Jackson 2 → 3
-          find src -name "*.java" -exec sed -i 's|com\.fasterxml\.jackson\.databind|tools.jackson.databind|g' {} +
-          find src -name "*.java" -exec sed -i 's|com\.fasterxml\.jackson\.core|tools.jackson.core|g' {} +
-          find src -name "*.java" -exec sed -i 's|com\.fasterxml\.jackson\.datatype|tools.jackson.datatype|g' {} +
-          find src -name "*.java" -exec sed -i 's|com\.fasterxml\.jackson\.dataformat|tools.jackson.dataformat|g' {} +
-          find src -name "*.java" -exec sed -i 's|com\.fasterxml\.jackson\.module|tools.jackson.module|g' {} +
-
-          # Spring Boot Jackson annotations
-          find src -name "*.java" -exec sed -i 's|import org\.springframework\.boot\.jackson\.JsonComponent|import org.springframework.boot.jackson.JacksonComponent|g' {} +
-          find src -name "*.java" -exec sed -i 's|import org\.springframework\.boot\.jackson\.JsonMixin|import org.springframework.boot.jackson.JacksonMixin|g' {} +
-          find src -name "*.java" -exec sed -i 's|@JsonComponent|@JacksonComponent|g' {} +
-          find src -name "*.java" -exec sed -i 's|@JsonMixin|@JacksonMixin|g' {} +
-          find src -name "*.java" -exec sed -i 's|JsonObjectSerializer|ObjectValueSerializer|g' {} +
-          find src -name "*.java" -exec sed -i 's|JsonObjectDeserializer|ObjectValueDeserializer|g' {} +
-
-          # MockBean / SpyBean
-          find src -name "*.java" -exec sed -i 's|import org\.springframework\.boot\.test\.mock\.mockito\.MockBean|import org.springframework.test.context.bean.override.mockito.MockitoBean|g' {} +
-          find src -name "*.java" -exec sed -i 's|import org\.springframework\.boot\.test\.mock\.mockito\.SpyBean|import org.springframework.test.context.bean.override.mockito.MockitoSpyBean|g' {} +
-          find src -name "*.java" -exec sed -i 's|@MockBean|@MockitoBean|g' {} +
-          find src -name "*.java" -exec sed -i 's|@SpyBean|@MockitoSpyBean|g' {} +
-
-          # JUnit 4 → Jupiter
-          find src -name "*.java" -exec sed -i 's|import org\.junit\.Test;|import org.junit.jupiter.api.Test;|g' {} +
-          find src -name "*.java" -exec sed -i 's|import org\.junit\.Before;|import org.junit.jupiter.api.BeforeEach;|g' {} +
-          find src -name "*.java" -exec sed -i 's|import org\.junit\.After;|import org.junit.jupiter.api.AfterEach;|g' {} +
-          find src -name "*.java" -exec sed -i 's|import org\.junit\.BeforeClass;|import org.junit.jupiter.api.BeforeAll;|g' {} +
-          find src -name "*.java" -exec sed -i 's|import org\.junit\.AfterClass;|import org.junit.jupiter.api.AfterAll;|g' {} +
-          find src -name "*.java" -exec sed -i 's|import org\.junit\.Ignore;|import org.junit.jupiter.api.Disabled;|g' {} +
-          find src -name "*.java" -exec sed -i 's|import org\.junit\.Assert;|import org.junit.jupiter.api.Assertions;|g' {} +
-          find src -name "*.java" -exec sed -i 's|@BeforeClass|@BeforeAll|g; s|@AfterClass|@AfterAll|g' {} +
-          find src -name "*.java" -exec sed -i 's|@Ignore|@Disabled|g' {} +
-
-          # Spring Security
-          find src -name "*.java" -exec sed -i 's|\.authorizeRequests()|.authorizeHttpRequests()|g' {} +
-          find src -name "*.java" -exec sed -i 's|\.antMatchers(|.requestMatchers(|g' {} +
-          find src -name "*.java" -exec sed -i 's|\.mvcMatchers(|.requestMatchers(|g' {} +
-
-          # Null safety: JSR-305 / Spring → JSpecify
-          find src -name "*.java" -exec sed -i 's|import javax\.annotation\.Nullable;|import org.jspecify.annotations.Nullable;|g' {} +
-          find src -name "*.java" -exec sed -i 's|import javax\.annotation\.Nonnull;|import org.jspecify.annotations.NonNull;|g' {} +
-          find src -name "*.java" -exec sed -i 's|import org\.springframework\.lang\.Nullable;|import org.jspecify.annotations.Nullable;|g' {} +
-          find src -name "*.java" -exec sed -i 's|import org\.springframework\.lang\.NonNull;|import org.jspecify.annotations.NonNull;|g' {} +
-
-          # Actuator
-          find src -name "*.java" -exec sed -i 's|@OptionalParameter|@Nullable|g' {} +
-
-          echo "✅ All import and annotation rewrites applied"
-
-      # ── Phase 3: Configuration Properties ────────────────────────────────
-      - name: "⚙️ Phase 3: Configuration properties"
-        working-directory: target-repo
-        run: |
-          echo "══════════════════════════════════════════"
-          echo "  PHASE 3: CONFIGURATION PROPERTIES"
-          echo "══════════════════════════════════════════"
-
-          find src/main/resources -name "application*.properties" -o -name "application*.yml" 2>/dev/null | while read -r pf; do
-            sed -i 's|spring\.jackson\.read\.|spring.jackson.json.read.|g' "$pf"
-            sed -i 's|spring\.jackson\.write\.|spring.jackson.json.write.|g' "$pf"
-            sed -i 's|spring\.jackson\.datetime\.|spring.jackson.json.datetime.|g' "$pf"
-            echo "  ✔ $pf"
-          done
-
-      # ── Phase 4: Docker & CI ─────────────────────────────────────────────
-      - name: "⚙️ Phase 4: Docker and CI files"
-        working-directory: target-repo
-        run: |
-          echo "══════════════════════════════════════════"
-          echo "  PHASE 4: DOCKER AND CI"
-          echo "══════════════════════════════════════════"
-
-          # Dockerfiles
-          find . -name "Dockerfile*" ! -path "./.git/*" 2>/dev/null | while read -r df; do
-            sed -i "s|eclipse-temurin:21|eclipse-temurin:${{ inputs.java_version }}|g" "$df"
-            sed -i "s|eclipse-temurin:17|eclipse-temurin:${{ inputs.java_version }}|g" "$df"
-            sed -i "s|amazoncorretto:21|amazoncorretto:${{ inputs.java_version }}|g" "$df"
-            sed -i "s|openjdk:21|eclipse-temurin:${{ inputs.java_version }}-jre-noble|g" "$df"
-            echo "  ✔ $df"
-          done
-
-          # Docker compose
-          find . \( -name "docker-compose*.yml" -o -name "docker-compose*.yaml" \) ! -path "./.git/*" 2>/dev/null | while read -r dc; do
-            sed -i "s|eclipse-temurin:21|eclipse-temurin:${{ inputs.java_version }}|g" "$dc"
-            echo "  ✔ $dc"
-          done
-
-          # CI/CD workflows
-          find .github/workflows -name "*.yml" 2>/dev/null | while read -r wf; do
-            sed -i "s|java-version: '21'|java-version: '${{ inputs.java_version }}'|g" "$wf"
-            sed -i "s|java-version: '17'|java-version: '${{ inputs.java_version }}'|g" "$wf"
-            sed -i "s|java-version: 21$|java-version: ${{ inputs.java_version }}|g" "$wf"
-            sed -i "s|java-version: 17$|java-version: ${{ inputs.java_version }}|g" "$wf"
-            echo "  ✔ $wf"
-          done
-
-      # ── Phase 5: Copy Copilot Instructions ───────────────────────────────
-      - name: "📋 Copy Copilot instructions to target"
-        if: inputs.copy_copilot_instructions
-        working-directory: target-repo
-        run: |
-          mkdir -p .github
-          cp "${{ github.workspace }}/migration-toolkit/config/copilot-instructions.md" .github/copilot-instructions.md
-          echo "✅ Copilot instructions copied to target repo"
-
-      # ── Phase 6: OpenRewrite ─────────────────────────────────────────────
-      - name: "⚙️ Phase 5: OpenRewrite (Maven)"
-        if: inputs.run_openrewrite && steps.detect.outputs.build_tool == 'maven'
-        working-directory: target-repo
-        continue-on-error: true
-        run: |
-          echo "══════════════════════════════════════════"
-          echo "  PHASE 5: OPENREWRITE"
-          echo "══════════════════════════════════════════"
-
-          mvn -U org.openrewrite.maven:rewrite-maven-plugin:6.28.1:run \
-            -Drewrite.activeRecipes=org.openrewrite.java.spring.boot4.UpgradeSpringBoot_4_0 \
-            -Drewrite.recipeArtifactCoordinates=org.openrewrite.recipe:rewrite-spring:6.23.1 \
-            -B 2>&1 | tail -20 || echo "::warning::OpenRewrite had errors — some recipes may not have applied"
-
-      - name: "⚙️ Phase 5: OpenRewrite (Gradle)"
-        if: inputs.run_openrewrite && steps.detect.outputs.build_tool == 'gradle'
-        working-directory: target-repo
-        continue-on-error: true
-        run: |
-          cp "${{ github.workspace }}/migration-toolkit/config/openrewrite-init.gradle" init-rewrite.gradle
-          ./gradlew --init-script init-rewrite.gradle rewriteRun 2>&1 | tail -20 || echo "::warning::OpenRewrite had errors"
-          rm -f init-rewrite.gradle
-
-      # ── Phase 7: Tests ───────────────────────────────────────────────────
-      - name: "🧪 Phase 6: Run tests"
-        if: inputs.run_tests
-        working-directory: target-repo
-        continue-on-error: true
-        id: tests
-        run: |
-          echo "══════════════════════════════════════════"
-          echo "  PHASE 6: TEST SUITE"
-          echo "══════════════════════════════════════════"
-
-          BUILD_TOOL="${{ steps.detect.outputs.build_tool }}"
-          if [[ "$BUILD_TOOL" == "maven" ]]; then
-            mvn test -B 2>&1 | tail -30
-            echo "test_result=$?" >> "$GITHUB_OUTPUT"
-          else
-            ./gradlew test 2>&1 | tail -30
-            echo "test_result=$?" >> "$GITHUB_OUTPUT"
-          fi
-
-      # ── Phase 8: Validation ──────────────────────────────────────────────
-      - name: "✅ Phase 7: Validation"
-        working-directory: target-repo
-        id: validation
-        run: |
-          echo "══════════════════════════════════════════"
-          echo "  PHASE 7: VALIDATION"
-          echo "══════════════════════════════════════════"
-
-          ISSUES=0
-
-          JAVAX_COUNT=$(grep -r "import javax\." src/ --include="*.java" 2>/dev/null | grep -v "javax\.annotation\.\|javax\.crypto\.\|javax\.net\.\|javax\.security\.\|javax\.xml\." | wc -l || echo "0")
-          [[ "$JAVAX_COUNT" -gt 0 ]] && echo "❌ javax.* imports: $JAVAX_COUNT" && ((ISSUES+=JAVAX_COUNT)) || echo "✅ No javax.* imports"
-
-          JACKSON2_COUNT=$(grep -r "import com\.fasterxml\.jackson\." src/ --include="*.java" 2>/dev/null | grep -v "annotation" | wc -l || echo "0")
-          [[ "$JACKSON2_COUNT" -gt 0 ]] && echo "❌ Jackson 2 imports: $JACKSON2_COUNT" && ((ISSUES+=JACKSON2_COUNT)) || echo "✅ No Jackson 2 imports"
-
-          MOCKBEAN_COUNT=$(grep -r "@MockBean\|@SpyBean" src/ --include="*.java" 2>/dev/null | grep -v "MockitoBean\|MockitoSpyBean\|import" | wc -l || echo "0")
-          [[ "$MOCKBEAN_COUNT" -gt 0 ]] && echo "❌ @MockBean/@SpyBean: $MOCKBEAN_COUNT" && ((ISSUES+=MOCKBEAN_COUNT)) || echo "✅ No @MockBean/@SpyBean"
-
-          JUNIT4_COUNT=$(grep -r "import org\.junit\." src/ --include="*.java" 2>/dev/null | grep -v "jupiter" | wc -l || echo "0")
-          [[ "$JUNIT4_COUNT" -gt 0 ]] && echo "❌ JUnit 4: $JUNIT4_COUNT" && ((ISSUES+=JUNIT4_COUNT)) || echo "✅ No JUnit 4"
-
-          UNDERTOW_COUNT=$(grep -r "undertow" src/ pom.xml build.gradle* 2>/dev/null | wc -l || echo "0")
-          [[ "$UNDERTOW_COUNT" -gt 0 ]] && echo "❌ Undertow refs: $UNDERTOW_COUNT" && ((ISSUES+=UNDERTOW_COUNT)) || echo "✅ No Undertow"
-
-          echo "total_issues=${ISSUES}" >> "$GITHUB_OUTPUT"
-          echo "javax_remaining=${JAVAX_COUNT}" >> "$GITHUB_OUTPUT"
-          echo "jackson2_remaining=${JACKSON2_COUNT}" >> "$GITHUB_OUTPUT"
-          echo "mockbean_remaining=${MOCKBEAN_COUNT}" >> "$GITHUB_OUTPUT"
-          echo "junit4_remaining=${JUNIT4_COUNT}" >> "$GITHUB_OUTPUT"
-
-      # ── Generate PR Body ─────────────────────────────────────────────────
-      - name: "📝 Generate PR body"
-        id: pr_body
-        run: |
-          cat > pr-body.md << 'PREOF'
-          ## 🚀 Automated Migration: Java ${{ inputs.java_version }} + Spring Boot ${{ inputs.spring_boot_version }}
-
-          > Generated by [${{ github.repository }}](https://github.com/${{ github.repository }}) migration workflow
-
-          ### 📊 Pre-Migration Scan
-          | Metric | Count |
-          |--------|-------|
-          | Total Java files | ${{ steps.prescan.outputs.java_files }} |
-          | Jackson 2 imports found | ${{ steps.prescan.outputs.jackson2_count }} |
-          | @MockBean/@SpyBean found | ${{ steps.prescan.outputs.mockbean_count }} |
-          | JUnit 4 imports found | ${{ steps.prescan.outputs.junit4_count }} |
-
-          ### ✅ Migration Phases
-          | Phase | Description | Status |
-          |-------|-------------|--------|
-          | 1 | Build files (version bumps, starter renames) | ✅ Applied |
-          | 2 | Import rewrites (Jackson 3, JUnit Jupiter, MockitoBean, Security, JSpecify) | ✅ Applied |
-          | 3 | Configuration properties (Jackson namespace) | ✅ Applied |
-          | 4 | Docker & CI files (Java version) | ✅ Applied |
-          | 5 | OpenRewrite deep transforms | ${{ inputs.run_openrewrite && '✅ Applied' || '⏭️ Skipped' }} |
-          | 6 | Test suite | ${{ inputs.run_tests && '✅ Ran' || '⏭️ Skipped' }} |
-          | 7 | Validation | ✅ Ran |
-
-          ### 🔍 Post-Migration Validation
-          | Check | Remaining Issues |
-          |-------|-----------------|
-          | javax.* imports | ${{ steps.validation.outputs.javax_remaining }} |
-          | Jackson 2 imports | ${{ steps.validation.outputs.jackson2_remaining }} |
-          | @MockBean/@SpyBean | ${{ steps.validation.outputs.mockbean_remaining }} |
-          | JUnit 4 imports | ${{ steps.validation.outputs.junit4_remaining }} |
-          | **Total** | **${{ steps.validation.outputs.total_issues }}** |
-
-          ### ⚠️ Manual Review Required
-          The following items **cannot be automated** and need human review:
-
-          - [ ] **Hibernate `merge()` return value** — verify code uses the returned managed entity, not the original
-          - [ ] **Custom Jackson serializers/deserializers** — review for Jackson 3 API compatibility
-          - [ ] **`@ConfigurationProperties` classes** — ensure no public field binding (must use private fields + getters/setters or records)
-          - [ ] **Spring Batch persistence** — decide: `spring-boot-starter-batch` (in-memory) vs `spring-boot-starter-batch-jdbc` (database)
-          - [ ] **Spring Security filter chain logic** — review custom authorization rules
-          - [ ] **Test starters** — add `spring-boot-starter-*-test` for each technology in use
-          - [ ] **`java.time` serialization** — test if Java-serialized `LocalDate`/`LocalDateTime` objects work across JDK versions
-
-          ### 🏃 Next Steps
-          1. Review all file changes in this PR
-          2. Address the manual review checklist above
-          3. Run the full test suite locally: `mvn clean test`
-          4. Start the application and smoke test endpoints
-          5. Merge when confident
-
-          ---
-          *Migration performed by [springboot4-migration](https://github.com/${{ github.repository }}) • Workflow run: [${{ github.run_id }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})*
-          PREOF
-
-      # ── Commit, Push, and Create PR ──────────────────────────────────────
-      - name: "📊 Check for changes"
-        working-directory: target-repo
-        id: changes
-        run: |
-          CHANGED=$(git diff --name-only | wc -l)
-          echo "changed_files=${CHANGED}" >> "$GITHUB_OUTPUT"
-          if [[ "$CHANGED" -gt 0 ]]; then
-            echo "has_changes=true" >> "$GITHUB_OUTPUT"
-            echo "✅ ${CHANGED} files changed"
-            git diff --stat
-          else
-            echo "has_changes=false" >> "$GITHUB_OUTPUT"
-            echo "ℹ️ No changes detected"
-          fi
-
-      - name: "📤 Commit and push to target repo"
-        if: steps.changes.outputs.has_changes == 'true' && inputs.dry_run == false
-        working-directory: target-repo
-        run: |
-          git add -A
-          git commit -m "🚀 Migrate to Java ${{ inputs.java_version }} + Spring Boot ${{ inputs.spring_boot_version }}
-
-          Automated migration by ${{ github.repository }}
-          Workflow: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-
-          Changes:
-          - Spring Boot ${{ steps.detect.outputs.current_version }} → ${{ inputs.spring_boot_version }}
-          - Java 21 → ${{ inputs.java_version }}
-          - Jackson 2 → 3 (package + annotation rewrites)
-          - @MockBean → @MockitoBean
-          - JUnit 4 → Jupiter
-          - Spring Security API updates
-          - Configuration property renames
-          - Docker/CI version updates
-          ${{ inputs.run_openrewrite && '- OpenRewrite AST transforms applied' || '' }}"
-
-          git push "https://x-access-token:${TARGET_TOKEN}@github.com/${{ inputs.target_repository }}.git" "${{ env.MIGRATION_BRANCH }}" --force
-          echo "✅ Pushed to ${{ inputs.target_repository }}:${{ env.MIGRATION_BRANCH }}"
-
-      - name: "🔀 Create Pull Request on target repo"
-        if: steps.changes.outputs.has_changes == 'true' && inputs.dry_run == false
+          # Updates 1.0.0 to 2.0.0-SNAPSHOT for your specific parent artifact
+          perl -i -0pe "s|(<artifactId>spring-boot-mongodb-parent</artifactId>\s*<version>).*?(</version>)|\${1}${PARENT_VERSION}\${2}|g" pom.xml
+          echo "✅ Parent version forced to ${PARENT_VERSION}"
         env:
-          GH_TOKEN: ${{ env.TARGET_TOKEN }}
+          PARENT_VERSION: ${{ inputs.parent_version }}
+
+      # ── STEP 2: OpenRewrite (AST Transformation) ─────────────────────
+      - name: Run OpenRewrite
+        working-directory: target-app
         run: |
-          # Check if PR already exists
-          EXISTING_PR=$(gh pr list \
-            --repo "${{ inputs.target_repository }}" \
-            --head "${{ env.MIGRATION_BRANCH }}" \
-            --json number \
-            --jq '.[0].number // empty' 2>/dev/null || echo "")
+          mvn -U org.openrewrite.maven:rewrite-maven-plugin:run \
+            -Drewrite.recipeArtifactCoordinates=org.openrewrite.recipe:rewrite-spring:LATEST \
+            -Drewrite.activeRecipes=org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_3
 
-          if [[ -n "$EXISTING_PR" ]]; then
-            echo "📝 Updating existing PR #${EXISTING_PR}"
-            gh pr edit "$EXISTING_PR" \
-              --repo "${{ inputs.target_repository }}" \
-              --body-file pr-body.md
-          else
-            echo "📝 Creating new PR"
-            gh pr create \
-              --repo "${{ inputs.target_repository }}" \
-              --base "${{ inputs.target_branch }}" \
-              --head "${{ env.MIGRATION_BRANCH }}" \
-              --title "🚀 Migrate to Java ${{ inputs.java_version }} + Spring Boot ${{ inputs.spring_boot_version }}" \
-              --body-file pr-body.md \
-              --label "migration,spring-boot-4,java-25,automated" \
-              --draft
-          fi
-
-          echo "✅ PR created/updated on ${{ inputs.target_repository }}"
-
-      # ── Dry Run Summary ──────────────────────────────────────────────────
-      - name: "📊 Dry run summary"
-        if: inputs.dry_run == true
-        working-directory: target-repo
+      # ── STEP 3: Apply Playbook Rules (Shell logic) ────────────────────
+      - name: "📖 Apply Playbook Rules"
+        working-directory: target-app
         run: |
-          echo "══════════════════════════════════════════"
-          echo "  DRY RUN COMPLETE"
-          echo "  Target: ${{ inputs.target_repository }}"
-          echo "══════════════════════════════════════════"
-          echo ""
-          echo "Files that would be changed:"
-          git diff --stat
-          echo ""
-          echo "Re-run with dry_run=false to create the PR."
+          chmod +x ../migration-toolkit/scripts/playbook-rules.sh
+          ../migration-toolkit/scripts/playbook-rules.sh .
 
-      # ── Job Summary ──────────────────────────────────────────────────────
-      - name: "📊 Workflow summary"
-        if: always()
-        run: |
-          cat >> "$GITHUB_STEP_SUMMARY" << EOF
-          ## Migration: \`${{ inputs.target_repository }}\`
-
-          | Setting | Value |
-          |---------|-------|
-          | Target repo | \`${{ inputs.target_repository }}\` |
-          | Source branch | \`${{ inputs.target_branch }}\` |
-          | Spring Boot | \`${{ inputs.spring_boot_version }}\` |
-          | Java | \`${{ inputs.java_version }}\` |
-          | OpenRewrite | \`${{ inputs.run_openrewrite }}\` |
-          | Tests | \`${{ inputs.run_tests }}\` |
-          | Dry run | \`${{ inputs.dry_run }}\` |
-          | Files changed | \`${{ steps.changes.outputs.changed_files }}\` |
-          | Validation issues | \`${{ steps.validation.outputs.total_issues }}\` |
-          EOF
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          path: target-app
+          token: ${{ secrets.PAT_TOKEN }}
+          commit-message: "chore: migrate to Spring Boot 4 and Java 25"
+          title: "🚀 Migration: Spring Boot 4 / Java 25"
+          body: "Updated parent to ${{ inputs.parent_version }} and applied playbook rules."

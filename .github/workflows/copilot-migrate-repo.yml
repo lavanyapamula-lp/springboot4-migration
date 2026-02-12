@@ -1,0 +1,48 @@
+name: Copilot Migration Trigger
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_repository:
+        description: 'Target Repository (e.g., org/app-1)'
+        required: true
+        type: string
+
+jobs:
+  trigger-copilot-migration:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download Migration Playbook
+        id: fetch-playbook
+        run: |
+          # URL to the RAW version of your playbook
+          PLAYBOOK_URL="https://raw.githubusercontent.com/Siri1990/springboot4-migration/main/migration-playbook.md"
+          
+          echo "Fetching playbook from: $PLAYBOOK_URL"
+          
+          # Download content to a temp file
+          curl -s "$PLAYBOOK_URL" -o migration-task.md
+          
+          # Append specific instruction for Copilot to the top
+          sed -i '1i # Migration Task\n@copilot please analyze this repository and apply the following migration plan:\n' migration-task.md
+
+      - name: Create Issue in Target Repository
+        env:
+          # REQUIRED: A PAT with 'repo' scope is needed to write to external repositories
+          GH_TOKEN: ${{ secrets.MIGRATION_PAT }}
+        run: |
+          REPO="${{ inputs.target_repository }}"
+          echo "Creating migration issue in $REPO..."
+
+          # Create the issue using GitHub CLI
+          # Note: We use --body-file to safely pass the long markdown content
+          gh issue create \
+            --repo "$REPO" \
+            --title "Maintenance: Migrate to Spring Boot 4 & Java 25" \
+            --body-file migration-task.md \
+            --label "migration" \
+            --label "java-25" 
+            
+          # Note on Assigning @copilot: 
+          # GitHub does not allow assigning issues to the '@copilot' bot user directly via API.
+          # Instead, we mentioned '@copilot' in the body (Step 1) which triggers the notification/context.
