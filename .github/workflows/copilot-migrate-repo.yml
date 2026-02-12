@@ -52,7 +52,7 @@ jobs:
             -f query="
               query {
                 repository(owner: \"${OWNER}\", name: \"${REPO}\") {
-                  suggestedActors(first: 1, capabilities: [CAN_BE_ASSIGNED_TO_COPILOT_CODING_AGENT]) {
+                  suggestedActors(first: 20) {
                     nodes {
                       ... on Bot {
                         id
@@ -62,10 +62,10 @@ jobs:
                   }
                 }
               }
-            " --jq '.data.repository.suggestedActors.nodes[0].id')
+            " --jq '.data.repository.suggestedActors.nodes[] | select(.login == "copilot-swe-agent") | .id')
 
           if [ -z "$COPILOT_ID" ]; then
-            echo "::error::Copilot coding agent not enabled on ${TARGET_REPO}"
+            echo "::error::copilot-swe-agent not found on ${TARGET_REPO}"
             echo "Enable it: Repo Settings → Copilot → Coding agent → Enabled"
             exit 1
           fi
