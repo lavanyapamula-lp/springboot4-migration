@@ -53,7 +53,12 @@ jobs:
               query {
                 repository(owner: \"${OWNER}\", name: \"${REPO}\") {
                   suggestedActors(first: 1, capabilities: [CAN_BE_ASSIGNED_TO_COPILOT_CODING_AGENT]) {
-                    nodes { id login }
+                    nodes {
+                      ... on Bot {
+                        id
+                        login
+                      }
+                    }
                   }
                 }
               }
