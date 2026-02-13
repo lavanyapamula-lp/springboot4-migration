@@ -38,61 +38,15 @@ jobs:
           # 3. Prepend Copilot instruction
           sed -i '1i # Migration Task\n@copilot please analyze this repository and apply the following migration plan:\n' migration-task.md
 
-      - name: "🚀 Create Issue & Assign to Copilot Agent"
+      - name: "🚀 Create Migration Issue"
         env:
           GH_TOKEN: ${{ secrets.MIGRATION_PAT }}
           TARGET_REPO: ${{ inputs.target_repository }}
         run: |
-          OWNER=$(echo "$TARGET_REPO" | cut -d'/' -f1)
-          REPO=$(echo "$TARGET_REPO" | cut -d'/' -f2)
-
-          # 1. Get Copilot bot ID via REST
-          COPILOT_ID=$(gh api "repos/${OWNER}/${REPO}/assignees" \
-            --paginate --jq '.[] | select(.login == "copilot-swe-agent") | .node_id')
-
-          if [ -z "$COPILOT_ID" ]; then
-            # Try the alternative bot name
-            COPILOT_ID=$(gh api "repos/${OWNER}/${REPO}/assignees" \
-              --paginate --jq '.[] | select(.login | test("copilot")) | .node_id')
-          fi
-
-          if [ -z "$COPILOT_ID" ]; then
-            echo "::error::Copilot agent not found in assignees for ${TARGET_REPO}"
-            echo "Enable it: Repo Settings → Copilot → Coding agent → Enabled"
-            exit 1
-          fi
-          echo "Copilot agent ID: ${COPILOT_ID}"
-
-          # 2. Get repo ID
-          REPO_ID=$(gh api graphql \
-            -f query="query { repository(owner: \"${OWNER}\", name: \"${REPO}\") { id } }" \
-            --jq '.data.repository.id')
-
-          # 3. Prepare issue body
-          ESCAPED_BODY=$(cat migration-task.md | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')
-
-          # 4. Create issue assigned to Copilot with agent trigger
-          RESULT=$(gh api graphql \
-            -H "GraphQL-Features: issues_copilot_assignment_api_support,coding_agent_model_selection" \
-            -f query="
-              mutation {
-                createIssue(input: {
-                  repositoryId: \"${REPO_ID}\",
-                  title: \"Maintenance: Migrate to Spring Boot 4 & Java 25\",
-                  body: ${ESCAPED_BODY},
-                  assigneeIds: [\"${COPILOT_ID}\"],
-                  agentAssignment: {
-                    targetRepositoryId: \"${REPO_ID}\",
-                    baseRef: \"main\",
-                    customInstructions: \"Apply the migration playbook from the issue body. Follow every rule precisely.\",
-                    customAgent: \"\",
-                    model: \"\"
-                  }
-                }) {
-                  issue { number url }
-                }
-              }
-            ")
-
-          ISSUE_URL=$(echo "$RESULT" | jq -r '.data.createIssue.issue.url')
-          echo "Issue created and assigned to Copilot: ${ISSUE_URL}"
+          echo "Creating issue in $TARGET_REPO..."
+          gh issue create \
+            --repo "$TARGET_REPO" \
+            --title "Maintenance: Migrate to Spring Boot 4 & Java 25" \
+            --body-file migration-task.md \
+            --label "migration" \
+            --label "java-25"
