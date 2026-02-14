@@ -3,6 +3,15 @@
 > **Purpose**: Machine-readable migration playbook for use with GitHub Copilot, Copilot Workspace, or any AI-assisted code transformation tool. Each rule is self-contained with find/replace patterns, AST-level instructions, and validation criteria.
 >
 > **Usage**: Point Copilot at this file as context when performing migrations. Rules are tagged with priority, scope, and file-pattern globs so agents can filter relevant rules per file.
+>
+> ⚠️ **BEFORE STARTING**: Review `PRE_MIGRATION_CHECKLIST.md` to ensure:
+> - Parent POM (if used) is published to Maven repository or local .m2
+> - Java 25 is installed and configured
+> - Repository structure is compatible
+>
+> 🤖 **FOR AGENTS**: This playbook applies to APPLICATION CODE ONLY.
+> - DO NOT create or modify parent POM files (they are external dependencies)
+> - ONLY update version references in child POMs
 
 ---
 
@@ -51,6 +60,14 @@ INSTRUCTIONS FOR AI AGENT:
 5. Rules marked [MANUAL-REVIEW] require human verification after applying.
 6. Do NOT apply rules to files under /test/resources/, /generated/, or /build/.
 7. After all rules: compile, run tests, report failures.
+
+⚠️ CRITICAL: EXTERNAL DEPENDENCIES ⚠️
+8. DO NOT create or modify parent POM files (springboot-test-parent).
+   Parent POMs are external artifacts published to Maven repositories.
+   ONLY update version references in child POMs.
+9. If a parent POM is not found in the repository, this is expected.
+   Report the missing parent POM but DO NOT create it.
+10. Focus ONLY on the target repository's application code and child POMs.
 ```
 
 ### Execution Order
@@ -205,65 +222,97 @@ note: "[MANUAL-REVIEW] Critical for applications using distributed caches with J
 
 ## 3. Spring Boot Parent & BOM
 
-### Rule 3.1 — Maven: Update Parent POM
+### Rule 3.1 — Maven: Update Parent POM Reference
 
 ```yaml
 scope: "**/pom.xml"
 priority: CRITICAL
 description: |
-  This project uses a custom parent POM (spring-boot-mongodb-parent) which itself
-  inherits from spring-boot-starter-parent. Update the child POM to reference
-  the new parent version that targets Spring Boot 4.0.0.
+  IMPORTANT FOR AGENTS: This rule ONLY updates the parent POM version reference.
+  DO NOT create or modify the parent POM file itself — it is managed externally.
+  
+  This project uses a custom parent POM (springboot-test-parent) which is:
+  - Published to a Maven repository (Nexus/Artifactory/Maven Central)
+  - Available in local .m2 repository for development
+  - Managed in a separate repository
+  
+  The parent POM (version 2.0.0-SNAPSHOT) already:
+  - Inherits from spring-boot-starter-parent:4.0.0
+  - Configures java.version=25
+  - Sets maven.compiler.source/target/release=25
+  - Includes lombok.version=1.18.40 with annotationProcessorPaths
+  - Configures Maven Toolchains for JDK 25
+
 find_regex: |
   <parent>\s*
     <groupId>com\.example</groupId>\s*
-    <artifactId>spring-boot-mongodb-parent</artifactId>\s*
+    <artifactId>springboot-test-parent</artifactId>\s*
     <version>1\.0\.0-SNAPSHOT</version>
 replace: |
   <parent>
     <groupId>com.example</groupId>
-    <artifactId>spring-boot-mongodb-parent</artifactId>
+    <artifactId>springboot-test-parent</artifactId>
     <version>2.0.0-SNAPSHOT</version>
+
 pre_requisite: |
-  The parent POM (spring-boot-mongodb-parent:2.0.0-SNAPSHOT) must be installed first:
-    mvn install -f <path-to>/spring-boot-mongodb-parent/pom.xml
-  The parent POM inherits from spring-boot-starter-parent:4.0.0 and sets:
-    - java.version=25
-    - maven.compiler.source/target/release=25
-    - lombok.version=1.18.40 (with annotationProcessorPaths)
-    - Maven Toolchains for JDK 25
-validate: "mvn dependency:tree resolves without conflicts"
+  EXTERNAL DEPENDENCY - NOT PART OF THIS MIGRATION:
+  The parent POM must be available from:
+  1. Organization's Maven repository (Nexus/Artifactory), OR
+  2. Local .m2 repository (for development/testing)
+  
+  If parent POM is not available, the migration will fail at compile time.
+  Contact your DevOps team to ensure parent POM 2.0.0-SNAPSHOT is published.
+
+validate: |
+  mvn dependency:tree resolves without conflicts
+  Parent POM is fetched from repository (not created locally)
+  
+agent_instructions: |
+  DO NOT create or modify any parent POM files.
+  ONLY update the <version> element in <parent> section of child POMs.
+  If you cannot find the parent POM in the repository, STOP and report the issue.
 ```
 
-### Rule 3.2 — Parent POM: spring-boot-mongodb-parent Configuration
+### Rule 3.2 — Parent POM Configuration (REFERENCE ONLY)
 
 ```yaml
-scope: "spring-boot-mongodb-parent/pom.xml"
-priority: CRITICAL
+scope: "N/A - EXTERNAL ARTIFACT"
+priority: INFORMATIONAL
 description: |
-  The custom parent POM must inherit from spring-boot-starter-parent:4.0.0
-  and configure Java 25 compilation, Lombok, and toolchains.
-find_regex: |
-  <parent>\s*
-    <groupId>org\.springframework\.boot</groupId>\s*
-    <artifactId>spring-boot-starter-parent</artifactId>\s*
-    <version>3\.\d+\.\d+</version>
-replace: |
+  ⚠️ FOR AGENTS: SKIP THIS RULE - DO NOT APPLY ⚠️
+  
+  This rule documents the parent POM configuration for reference only.
+  The parent POM (springboot-test-parent) is managed externally and
+  should NOT be modified as part of this migration.
+  
+  If you are a human and need to update the parent POM itself, do so in
+  its separate repository, then publish to your Maven repository.
+
+reference_configuration: |
+  The parent POM (springboot-test-parent:2.0.0-SNAPSHOT) contains:
+  
   <parent>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-parent</artifactId>
     <version>4.0.0</version>
-additional_changes:
-  - property: "spring-boot.version" → "4.0.0"
-  - property: "java.version" → "25"
-  - property: "maven.compiler.source" → "25"
-  - property: "maven.compiler.target" → "25"
-  - property: "lombok.version" → "1.18.40" (required for Java 25)
-  - plugin: maven-compiler-plugin → add Lombok to annotationProcessorPaths
-  - plugin: maven-toolchains-plugin → JDK version 25
-  - starters: spring-boot-starter-webmvc (replaces spring-boot-starter-web)
-  - test starters: spring-boot-starter-webmvc-test, spring-boot-starter-data-mongodb-test
-validate: "mvn install on parent succeeds; child project resolves all dependencies"
+  </parent>
+  
+  <properties>
+    <spring-boot.version>4.0.0</spring-boot.version>
+    <java.version>25</java.version>
+    <maven.compiler.source>25</maven.compiler.source>
+    <maven.compiler.target>25</maven.compiler.target>
+    <lombok.version>1.18.40</lombok.version>
+  </properties>
+  
+  <!-- Maven Compiler Plugin with Lombok -->
+  <!-- Maven Toolchains Plugin for JDK 25 -->
+  <!-- Starter dependencies in dependencyManagement -->
+
+agent_instructions: |
+  SKIP THIS RULE ENTIRELY.
+  This is documentation only - the parent POM is external.
+  If parent POM is missing, report to the user but DO NOT create it.
 ```
 
 ### Rule 3.3 — Gradle: Update Spring Boot Plugin

@@ -42,17 +42,38 @@
 springboot4-migration/
 ├── .github/
 │   └── workflows/
-│       └── migrate-target-repo.yml     # The main workflow
+│       ├── migrate-target-repo.yml      # The main workflow
+│       └── copilot-migrate-repo.yml     # Copilot-based migration workflow
 ├── scripts/
-│   ├── migrate.sh                      # Mechanical migration script
-│   ├── validate.sh                     # Post-migration validation
-│   └── generate-pr-body.sh            # PR description generator
+│   ├── migrate.sh                       # Mechanical migration script
+│   ├── validate.sh                      # Post-migration validation
+│   └── generate-pr-body.sh              # PR description generator
 ├── config/
-│   ├── openrewrite-init.gradle        # Gradle OpenRewrite init script
-│   └── copilot-instructions.md        # Copilot instructions (copied to target)
-├── migration-playbook.md              # Full playbook reference
-└── README.md                          # This file
+│   ├── openrewrite-init.gradle          # Gradle OpenRewrite init script
+│   └── copilot-instructions.md          # Copilot instructions (copied to target)
+├── migration-playbook.md                # Full playbook reference
+├── PRE_MIGRATION_CHECKLIST.md           # Prerequisites before migration
+└── README.md                            # This file
 ```
+
+## Prerequisites
+
+Before migrating any target repository, ensure:
+
+1. **Parent POM (if used)** is already migrated to Spring Boot 4 and available:
+   - Published to your Maven repository (Nexus/Artifactory), OR
+   - Installed in local .m2 for testing: `mvn install`
+   - **The agent will NOT create parent POMs** — they must exist externally
+
+2. **Java 25** is installed in your CI/CD environment and locally
+
+3. **Maven 3.9+** or **Gradle 8.14+** is available
+
+4. Target repository has a clean working directory (no uncommitted changes)
+
+📋 **See `PRE_MIGRATION_CHECKLIST.md` for full details**
+
+---
 
 ## Setup Instructions
 
@@ -119,6 +140,10 @@ git push origin main
 
 ### Step 5: Run the Migration
 
+⚠️ **BEFORE STARTING**: Complete the `PRE_MIGRATION_CHECKLIST.md`
+
+**Option A: Automated Workflow**
+
 1. Go to **springboot4-migration** repo → **Actions** tab
 2. Click **"🚀 Migrate Target Repository"**
 3. Click **"Run workflow"**
@@ -133,6 +158,19 @@ The workflow will:
 2. Run all migration phases
 3. Push a migration branch to the target repo
 4. Create a draft PR on the target repo with a detailed summary
+
+**Option B: Copilot-Based Workflow**
+
+1. Go to **Actions** → **"Copilot Migration Trigger"**
+2. Enter target repository: `your-org/your-app`
+3. Creates an issue on the target repo with the migration playbook
+4. Copilot agent applies the migration automatically
+5. Review the changes and create a PR
+
+**Note**: Copilot workflow is designed for repositories where:
+- Parent POM is external (in Nexus/Maven repo)
+- Agent should only update version references
+- No parent POM creation is needed
 
 ### Step 6: Review the PR on the Target Repo
 

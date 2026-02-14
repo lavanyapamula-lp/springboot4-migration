@@ -31,7 +31,7 @@ jobs:
           done
 
           # 2. Download the latest Migration Playbook
-          PLAYBOOK_URL="https://raw.githubusercontent.com/Siri1990/springboot4-migration/main/migration-playbook.md"
+          PLAYBOOK_URL="https://raw.githubusercontent.com/lavanyapamula-lp/springboot4-migration/main/migration-playbook.md"
           echo "Fetching playbook from: $PLAYBOOK_URL"
           curl -sL "$PLAYBOOK_URL" -o migration-task.md
 

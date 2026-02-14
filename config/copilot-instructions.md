@@ -27,6 +27,15 @@ This repository is **actively being migrated** from:
 
 **Migration playbook**: See `migration-playbook.md` in the project root for the full rule set.
 
+### ⚠️ Important: External Dependencies
+
+**DO NOT create or modify parent POM files** (e.g., `spring-boot-mongodb-parent`).  
+Parent POMs are external artifacts managed separately and published to:
+- Organization's Maven repository (Nexus/Artifactory)
+- Local .m2 repository (for development)
+
+**ONLY update** the `<version>` element in `<parent>` sections of child POMs.
+
 ---
 
 ## Global Rules — Apply to ALL Copilot Interactions
