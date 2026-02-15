@@ -1,0 +1,156 @@
+# ══════════════════════════════════════════════════════════════════════════════
+# openrewrite-config.yml — OpenRewrite recipes for Spring Boot 4 migration
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# This file configures OpenRewrite to perform deep, AST-aware code
+# transformations that go beyond what sed/grep can safely do.
+#
+# USAGE WITH MAVEN:
+#   1. Copy the <plugin> block below into your pom.xml <build><plugins>
+#   2. Run: mvn rewrite:run
+#   3. Review changes: git diff
+#   4. Remove the plugin after migration
+#
+# USAGE WITH GRADLE:
+#   1. Copy the Gradle block below into your build.gradle
+#   2. Run: ./gradlew rewriteRun
+#   3. Review changes: git diff
+#   4. Remove the plugin after migration
+#
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │ MAVEN — Add this to your pom.xml inside <build><plugins>               │
+# └──────────────────────────────────────────────────────────────────────────┘
+#
+# <plugin>
+#     <groupId>org.openrewrite.maven</groupId>
+#     <artifactId>rewrite-maven-plugin</artifactId>
+#     <version>6.28.1</version>
+#     <configuration>
+#         <exportDatatables>true</exportDatatables>
+#         <activeRecipes>
+#             <!-- Master recipe — includes ALL sub-recipes below -->
+#             <recipe>org.openrewrite.java.spring.boot4.UpgradeSpringBoot_4_0</recipe>
+#         </activeRecipes>
+#     </configuration>
+#     <dependencies>
+#         <dependency>
+#             <groupId>org.openrewrite.recipe</groupId>
+#             <artifactId>rewrite-spring</artifactId>
+#             <version>6.23.1</version>
+#         </dependency>
+#     </dependencies>
+# </plugin>
+#
+# Run:  mvn rewrite:run
+# Preview only:  mvn rewrite:dryRun
+
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │ GRADLE — Add this to your build.gradle / build.gradle.kts              │
+# └──────────────────────────────────────────────────────────────────────────┘
+#
+# plugins {
+#     id("org.openrewrite.rewrite") version("latest.release")
+# }
+#
+# rewrite {
+#     activeRecipe("org.openrewrite.java.spring.boot4.UpgradeSpringBoot_4_0")
+#     setExportDatatables(true)
+# }
+#
+# repositories {
+#     mavenCentral()
+# }
+#
+# dependencies {
+#     rewrite("org.openrewrite.recipe:rewrite-spring:6.23.1")
+# }
+#
+# Run:  ./gradlew rewriteRun
+# Preview only:  ./gradlew rewriteDryRun
+
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │ WHAT THE MASTER RECIPE DOES                                            │
+# └──────────────────────────────────────────────────────────────────────────┘
+#
+# The composite recipe org.openrewrite.java.spring.boot4.UpgradeSpringBoot_4_0
+# chains these sub-recipes in order:
+#
+# 1.  UpgradeSpringBoot_3_5
+#     └── Includes all 3.0 → 3.1 → 3.2 → 3.3 → 3.4 → 3.5 migrations
+#         (safe even if you're already on 3.5)
+#
+# 2.  UpgradeSpringFramework_7_0
+#     └── API changes, bean lifecycle updates, WebFlux/MVC changes
+#
+# 3.  UpgradeSpringSecurity_7_0
+#     └── Security filter chain, authorization model, CSRF updates
+#
+# 4.  SpringBatch5To6Migration
+#     └── Batch metadata, job repository, step changes
+#
+# 5.  SpringBootProperties_4_0
+#     └── All application.properties/yml key renames
+#
+# 6.  ReplaceMockBeanAndSpyBean
+#     └── @MockBean → @MockitoBean, @SpyBean → @MockitoSpyBean
+#
+# 7.  MigrateToHibernate71
+#     └── Hibernate 6 → 7.1 API changes, property renames
+#
+# 8.  Testcontainers2Migration
+#     └── Testcontainers 1.x → 2.0 API changes
+#
+# 9.  UpgradeSpringDoc_3_0
+#     └── SpringDoc/Swagger migration
+#
+# 10. MigrateToModularStarters
+#     └── Starter POM renames and splits
+#
+# 11. UpgradeJackson_2_3
+#     └── Jackson 2 → 3 package renames, API changes, import rewrites
+
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │ RUNNING INDIVIDUAL RECIPES (if you want fine-grained control)          │
+# └──────────────────────────────────────────────────────────────────────────┘
+#
+# Instead of the master recipe, you can run individual recipes:
+#
+# Maven example (single recipe):
+#   mvn rewrite:run -Drewrite.activeRecipes=org.openrewrite.java.spring.boot4.ReplaceMockBeanAndSpyBean
+#
+# Available individual recipes:
+#   org.openrewrite.java.spring.boot4.SpringBootProperties_4_0
+#   org.openrewrite.java.spring.boot4.ReplaceMockBeanAndSpyBean
+#   org.openrewrite.java.spring.boot4.MigrateToModularStarters
+#   org.openrewrite.java.spring.framework.UpgradeSpringFramework_7_0
+#   org.openrewrite.java.spring.security7.UpgradeSpringSecurity_7_0
+#   org.openrewrite.java.spring.batch.SpringBatch5To6Migration
+#   org.openrewrite.hibernate.MigrateToHibernate71
+#   org.openrewrite.java.testing.testcontainers.Testcontainers2Migration
+#   org.openrewrite.java.springdoc.UpgradeSpringDoc_3_0
+#   org.openrewrite.java.jackson.UpgradeJackson_2_3
+
+# ┌──────────────────────────────────────────────────────────────────────────┐
+# │ AFTER OPENREWRITE — WHAT'S LEFT FOR MANUAL/COPILOT REVIEW             │
+# └──────────────────────────────────────────────────────────────────────────┘
+#
+# OpenRewrite handles ~85-90% of mechanical changes. The remaining items
+# require human judgment:
+#
+# ❌ NOT automated by OpenRewrite:
+#   - Custom Jackson ObjectMapper/JsonMapper configuration logic
+#   - Hibernate merge() return value correctness
+#   - Hibernate fetch behavior verification
+#   - Spring Security custom filter chain business logic
+#   - @ConfigurationProperties public field → private field refactoring
+#   - Spring Batch in-memory vs JDBC decision
+#   - Virtual thread adoption decisions
+#   - New feature adoption (@Retryable, @ApiVersion, @HttpServiceClient)
+#   - Docker base image updates
+#   - CI/CD pipeline Java version updates
+#   - JVM flag cleanup
+#   - Performance baseline comparison
+#
+# Use Copilot with .github/copilot-instructions.md for these remaining items.
