@@ -1,0 +1,30 @@
+# Parent POM Configuration
+#
+# Configure your organization's parent POM details here.
+# The migration workflow uses these settings when creating the migration issue
+# and when resolving the parent from GitHub Packages (e.g. in CI or local .m2).
+
+parent_pom:
+  # GitHub organization or user that owns the parent POM repository
+  owner: "lavanyapamula-lp"
+  
+  # Repository name where parent POM is published
+  repository: "springboot-test-parent"
+  
+  # Maven coordinates
+  groupId: "com.example"
+  artifactId: "springboot-test-parent"
+  
+  # Target version after migration
+  version: "2.0.0"
+  
+  # GitHub Packages URL (constructed from owner/repository)
+  # Format: https://maven.pkg.github.com/{owner}/{repository}
+  packages_url: "https://maven.pkg.github.com/lavanyapamula-lp/springboot-test-parent"
+
+# Instructions:
+# 1. Update 'owner' with your GitHub organization (e.g., "mycompany")
+# 2. Update 'repository' with your parent POM repo name
+# 3. Update 'groupId' and 'artifactId' if different from defaults
+# 4. Update 'version' to match your migrated parent POM version
+# 5. The 'packages_url' will be auto-constructed, but you can override if needed

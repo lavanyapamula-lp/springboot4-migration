@@ -1,8 +1,17 @@
 # Migration Playbook: Java 21 + Spring Boot 3 → Java 25 + Spring Boot 4
 
-> **Purpose**: Machine-readable migration playbook for use with GitHub Copilot, Copilot Workspace, or any AI-assisted code transformation tool. Each rule is self-contained with find/replace patterns, AST-level instructions, and validation criteria.
+> **Purpose**: Machine-readable migration playbook for manual use or any automation (scripts, CI, or AI-assisted tools). Each rule is self-contained with find/replace patterns, AST-level instructions, and validation criteria. No copilot-instructions or tool-specific files; this playbook is the single contract.
 >
-> **Usage**: Point Copilot at this file as context when performing migrations. Rules are tagged with priority, scope, and file-pattern globs so agents can filter relevant rules per file.
+> **Usage**: Follow the playbook when performing migrations (manually or via your chosen tooling). Rules are tagged with priority, scope, and file-pattern globs so you or your automation can filter relevant rules per file.
+>
+> ⚠️ **BEFORE STARTING**: Ensure prerequisites are met:
+> - Parent POM (if used) is published to Maven repository or local .m2
+> - Java 25 is installed and configured
+> - Repository structure is compatible
+>
+> 🤖 **FOR AUTOMATION / AGENTS**: This playbook applies to APPLICATION CODE ONLY.
+> - DO NOT create or modify parent POM files (they are external dependencies)
+> - ONLY update version references in child POMs
 
 ---
 
@@ -35,10 +44,10 @@
 
 ## 0. Meta — How to Use This Playbook
 
-### For Copilot / AI Agents
+### For Automation / Manual Use
 
 ```text
-INSTRUCTIONS FOR AI AGENT:
+INSTRUCTIONS (for manual use or automation):
 1. Read the entire playbook before making changes.
 2. Process rules in order (Section 1 → 18). Dependencies exist between sections.
 3. Each rule has:
@@ -48,9 +57,17 @@ INSTRUCTIONS FOR AI AGENT:
    - REPLACE: replacement pattern
    - VALIDATE: how to confirm the change is correct
 4. Rules marked [CONDITIONAL] only apply if the codebase uses that feature.
-5. Rules marked [MANUAL-REVIEW] require human verification after applying.
+5. Rules marked [MANUAL-REVIEW] require manual verification after applying.
 6. Do NOT apply rules to files under /test/resources/, /generated/, or /build/.
 7. After all rules: compile, run tests, report failures.
+
+⚠️ CRITICAL: EXTERNAL DEPENDENCIES ⚠️
+8. DO NOT create or modify parent POM files (springboot-test-parent).
+   Parent POMs are external artifacts published to Maven repositories.
+   ONLY update version references in child POMs.
+9. If a parent POM is not found in the repository, this is expected.
+   Report the missing parent POM but DO NOT create it.
+10. Focus ONLY on the target repository's application code and child POMs.
 ```
 
 ### Execution Order
@@ -205,65 +222,219 @@ note: "[MANUAL-REVIEW] Critical for applications using distributed caches with J
 
 ## 3. Spring Boot Parent & BOM
 
-### Rule 3.1 — Maven: Update Parent POM
+### Rule 3.1 — Maven: Update Parent POM Reference
 
 ```yaml
 scope: "**/pom.xml"
 priority: CRITICAL
 description: |
-  This project uses a custom parent POM (spring-boot-mongodb-parent) which itself
-  inherits from spring-boot-starter-parent. Update the child POM to reference
-  the new parent version that targets Spring Boot 4.0.0.
+  IMPORTANT FOR AGENTS: This rule ONLY updates the parent POM version reference.
+  DO NOT create or modify the parent POM file itself — it is managed externally.
+  
+  This project uses a custom parent POM (springboot-test-parent) which is:
+  - Published to a Maven repository (Nexus/Artifactory/Maven Central)
+  - Available in local .m2 repository for development
+  - Managed in a separate repository
+  
+  The parent POM (version 2.0.0) already:
+  - Inherits from spring-boot-starter-parent:4.0.0
+  - Configures java.version=25
+  - Sets maven.compiler.source/target/release=25
+  - Includes lombok.version=1.18.40 with annotationProcessorPaths
+  - Configures Maven Toolchains for JDK 25
+
 find_regex: |
   <parent>\s*
     <groupId>com\.example</groupId>\s*
-    <artifactId>spring-boot-mongodb-parent</artifactId>\s*
+    <artifactId>springboot-test-parent</artifactId>\s*
     <version>1\.0\.0-SNAPSHOT</version>
 replace: |
   <parent>
     <groupId>com.example</groupId>
-    <artifactId>spring-boot-mongodb-parent</artifactId>
-    <version>2.0.0-SNAPSHOT</version>
+    <artifactId>springboot-test-parent</artifactId>
+    <version>2.0.0</version>
+
 pre_requisite: |
-  The parent POM (spring-boot-mongodb-parent:2.0.0-SNAPSHOT) must be installed first:
-    mvn install -f <path-to>/spring-boot-mongodb-parent/pom.xml
-  The parent POM inherits from spring-boot-starter-parent:4.0.0 and sets:
-    - java.version=25
-    - maven.compiler.source/target/release=25
-    - lombok.version=1.18.40 (with annotationProcessorPaths)
-    - Maven Toolchains for JDK 25
-validate: "mvn dependency:tree resolves without conflicts"
+  EXTERNAL DEPENDENCY - NOT PART OF THIS MIGRATION:
+  The parent POM must be available from:
+  1. Organization's Maven repository (Nexus/Artifactory), OR
+  2. Local .m2 repository (for development/testing)
+  
+  If parent POM is not available, the migration will fail at compile time.
+  Contact your DevOps team to ensure parent POM 2.0.0 is published.
+
+validate: |
+  mvn dependency:tree resolves without conflicts
+  Parent POM is fetched from repository (not created locally)
+  
+agent_instructions: |
+  DO NOT create or modify any parent POM files.
+  ONLY update the <version> element in <parent> section of child POMs.
+  If you cannot find the parent POM in the repository, STOP and report the issue.
 ```
 
-### Rule 3.2 — Parent POM: spring-boot-mongodb-parent Configuration
+### Rule 3.2 — Parent POM Configuration (REFERENCE ONLY)
 
 ```yaml
-scope: "spring-boot-mongodb-parent/pom.xml"
-priority: CRITICAL
+scope: "N/A - EXTERNAL ARTIFACT"
+priority: INFORMATIONAL
 description: |
-  The custom parent POM must inherit from spring-boot-starter-parent:4.0.0
-  and configure Java 25 compilation, Lombok, and toolchains.
-find_regex: |
-  <parent>\s*
-    <groupId>org\.springframework\.boot</groupId>\s*
-    <artifactId>spring-boot-starter-parent</artifactId>\s*
-    <version>3\.\d+\.\d+</version>
-replace: |
+  ⚠️ FOR AGENTS: SKIP THIS RULE - DO NOT APPLY ⚠️
+  
+  This rule documents the parent POM configuration for reference only.
+  The parent POM (springboot-test-parent) is managed externally and
+  should NOT be modified as part of this migration.
+  
+  To update the parent POM itself (manual change), do so in
+  its separate repository, then publish to your Maven repository.
+
+reference_configuration: |
+  The parent POM (springboot-test-parent:2.0.0) contains:
+  
   <parent>
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-parent</artifactId>
     <version>4.0.0</version>
-additional_changes:
-  - property: "spring-boot.version" → "4.0.0"
-  - property: "java.version" → "25"
-  - property: "maven.compiler.source" → "25"
-  - property: "maven.compiler.target" → "25"
-  - property: "lombok.version" → "1.18.40" (required for Java 25)
-  - plugin: maven-compiler-plugin → add Lombok to annotationProcessorPaths
-  - plugin: maven-toolchains-plugin → JDK version 25
-  - starters: spring-boot-starter-webmvc (replaces spring-boot-starter-web)
-  - test starters: spring-boot-starter-webmvc-test, spring-boot-starter-data-mongodb-test
-validate: "mvn install on parent succeeds; child project resolves all dependencies"
+  </parent>
+  
+  <properties>
+    <spring-boot.version>4.0.0</spring-boot.version>
+    <java.version>25</java.version>
+    <maven.compiler.source>25</maven.compiler.source>
+    <maven.compiler.target>25</maven.compiler.target>
+    <lombok.version>1.18.40</lombok.version>
+  </properties>
+  
+  <!-- Maven Compiler Plugin with Lombok -->
+  <!-- Maven Toolchains Plugin for JDK 25 -->
+  <!-- Starter dependencies in dependencyManagement -->
+
+agent_instructions: |
+  SKIP THIS RULE ENTIRELY.
+  This is documentation only - the parent POM is external.
+  If parent POM is missing, report to the user but DO NOT create it.
+```
+
+### Rule 3.2.1 — Configure Maven to Resolve Parent POM from GitHub Packages
+
+```yaml
+scope: "Runtime Maven configuration (~/.m2/settings.xml or mvn -s)"
+priority: CRITICAL
+condition: "Parent POM is published to GitHub Packages"
+description: |
+  Configure Maven to resolve the parent POM from GitHub Packages.
+  This enables compilation and testing during migration in GitHub environments.
+
+action: |
+  CREATE temporary file during build: ~/.m2/settings.xml
+  DO NOT commit settings.xml to target repository.
+  
+  <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0
+                                https://maven.apache.org/xsd/settings-1.0.0.xsd">
+      <servers>
+          <server>
+              <id>github</id>
+              <username>${env.GITHUB_ACTOR}</username>
+              <password>${env.GITHUB_TOKEN}</password>
+          </server>
+      </servers>
+      
+      <profiles>
+          <profile>
+              <id>github-packages</id>
+              <repositories>
+                  <repository>
+                      <id>github</id>
+                      <url>https://maven.pkg.github.com/OWNER/REPO</url>
+                      <releases><enabled>true</enabled></releases>
+                      <snapshots>
+                          <enabled>true</enabled>
+                          <updatePolicy>always</updatePolicy>
+                      </snapshots>
+                  </repository>
+              </repositories>
+          </profile>
+      </profiles>
+      
+      <activeProfiles>
+          <activeProfile>github-packages</activeProfile>
+      </activeProfiles>
+  </settings>
+  
+  Replace:
+  - OWNER: GitHub organization/user (e.g., yourorg)
+  - REPO: Parent POM repository name (e.g., springboot-test-parent)
+  
+  Example: https://maven.pkg.github.com/yourorg/springboot-test-parent
+
+validation: |
+  Test parent POM resolution with:
+  export GITHUB_ACTOR="github-username"
+  export GITHUB_TOKEN="ghp_your_token"
+  mvn dependency:tree
+
+agent_instructions: |
+  REQUIRED STEP before running mvn compile:
+  1. Create temporary ~/.m2/settings.xml with GitHub Packages configuration
+  2. Environment variables GITHUB_ACTOR and GITHUB_TOKEN must be available
+  3. In GitHub Actions, GITHUB_TOKEN is automatically available
+  4. For automation/agents, use available GitHub credentials (e.g. MIGRATION_PAT or GITHUB_TOKEN)
+  5. Test with: mvn -s ~/.m2/settings.xml dependency:get -Dartifact=com.example:springboot-test-parent:2.0.0:pom
+  6. Compile with: mvn -s ~/.m2/settings.xml clean compile -DskipTests
+  7. NEVER commit .mvn/settings.xml in the target repository
+```
+
+### Rule 3.2.2 — Alternative: Configure Nexus Repository
+
+```yaml
+scope: "Runtime Maven configuration (~/.m2/settings.xml or mvn -s)"
+priority: CRITICAL
+condition: "Parent POM is published to private Nexus/Artifactory"
+description: |
+  If parent POM is in a private Maven repository (Nexus/Artifactory),
+  configure Maven to access it.
+
+action: |
+  CREATE temporary file during build: ~/.m2/settings.xml
+  DO NOT commit settings.xml to target repository.
+  
+  <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">
+      <servers>
+          <server>
+              <id>nexus</id>
+              <username>${env.NEXUS_USERNAME}</username>
+              <password>${env.NEXUS_PASSWORD}</password>
+          </server>
+      </servers>
+      
+      <profiles>
+          <profile>
+              <id>nexus</id>
+              <repositories>
+                  <repository>
+                      <id>nexus</id>
+                      <url>https://nexus.yourcompany.com/repository/maven-public/</url>
+                      <releases><enabled>true</enabled></releases>
+                      <snapshots><enabled>true</enabled></snapshots>
+                  </repository>
+              </repositories>
+          </profile>
+      </profiles>
+      
+      <activeProfiles>
+          <activeProfile>nexus</activeProfile>
+      </activeProfiles>
+  </settings>
+
+note: |
+  [CONDITIONAL]
+  If you are an automated agent and cannot access private Nexus:
+  - Apply all migration rules
+  - SKIP compilation (mvn compile)
+  - Document in summary: "Compilation skipped - requires Nexus credentials"
+  - Compilation will be validated in target repository's CI/CD
 ```
 
 ### Rule 3.3 — Gradle: Update Spring Boot Plugin
@@ -1300,11 +1471,50 @@ actions:
 
 ```yaml
 priority: CRITICAL
+description: |
+  Verify the application compiles with all migration changes.
+  
+  AGENT INSTRUCTIONS:
+  Before running mvn compile, ensure parent POM can be resolved:
+  1. Check if runtime settings exists (~/.m2/settings.xml) or pass -s to Maven
+  2. Verify GITHUB_TOKEN or NEXUS credentials are available
+  3. If parent POM resolution fails, SKIP compilation and document this
+
 commands:
-  maven: "mvn clean compile -DskipTests"
+  maven: |
+    # First, verify parent POM is resolvable
+    mvn -s ~/.m2/settings.xml dependency:get \
+      -Dartifact=com.example:springboot-test-parent:2.0.0:pom \
+      -DremoteRepositories=github::https://maven.pkg.github.com/OWNER/REPO
+    
+    # If successful, compile
+    mvn -s ~/.m2/settings.xml clean compile -DskipTests
+    
   gradle: "./gradlew clean compileJava"
+  
 expected: "BUILD SUCCESS with zero errors"
-on_failure: "Fix compilation errors before proceeding. Most common: missing imports after Jackson/starter changes."
+
+on_failure: |
+  ERROR: "Could not resolve parent POM"
+  → Check ~/.m2/settings.xml exists (or provide valid file with -s)
+  → Verify GITHUB_TOKEN environment variable is set
+  → Try: export GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+  → If still fails and you are an agent, SKIP and document:
+    "⚠️ Compilation skipped - parent POM requires authentication.
+     All code changes applied successfully.
+     Compilation will be validated in target repository's CI/CD."
+  
+  ERROR: Other compilation errors
+  → Fix compilation errors before proceeding
+  → Most common: missing imports after Jackson/starter changes
+
+agent_instructions: |
+  If running in GitHub environment:
+  1. GITHUB_TOKEN is available as environment variable
+  2. GITHUB_ACTOR is your GitHub username
+  3. Create temporary ~/.m2/settings.xml before compiling (Rule 3.2.1)
+  4. Run compilation
+  5. If parent POM resolution fails despite settings, SKIP compilation gracefully
 ```
 
 ### Rule 18.2 — Test Suite
@@ -1370,6 +1580,62 @@ checks:
   - "No JUnit 4 on classpath"
   - "No conflicting Spring Framework versions (should all be 7.x)"
   - "No Undertow dependencies"
+```
+
+### Rule 18.7 — Generate MIGRATION_SUMMARY.md
+
+```yaml
+priority: CRITICAL
+scope: "**/*"
+description: |
+  Generate a migration summary file in the repository root.
+  This file is required even when compile/test steps fail or are skipped.
+
+action: |
+  CREATE file: MIGRATION_SUMMARY.md
+
+  Required sections:
+  1. Overview
+  2. Parent POM/BOM changes
+  3. Dependency/starter changes
+  4. Source code updates
+  5. Build validation results (commands + pass/fail)
+  6. Test validation results (commands + pass/fail)
+  7. Skipped steps and reasons
+  8. Manual follow-ups
+
+template: |
+  # Migration Summary
+
+  ## Overview
+  - Target: <repo-name>
+  - Migration: Java 21/Spring Boot 3 -> Java 25/Spring Boot 4
+  - Date: <yyyy-mm-dd>
+
+  ## Parent POM/BOM Changes
+  - Parent: <old> -> <new>
+  - Repository source: <github-packages|nexus|local>
+
+  ## Build Validation
+  - Command(s): <commands>
+  - Result: <success|failed|skipped>
+  - Notes: <error or confirmation>
+
+  ## Test Validation
+  - Command(s): <commands>
+  - Result: <success|failed|skipped>
+  - Notes: <error or confirmation>
+
+  ## Files Changed
+  - <file1>
+  - <file2>
+
+  ## Follow-ups
+  - <manual tasks, if any>
+
+validate: |
+  File exists: MIGRATION_SUMMARY.md
+  Includes build/test results and failure/skipped reasons if applicable.
 ```
 
 ---
