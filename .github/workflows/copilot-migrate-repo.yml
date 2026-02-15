@@ -139,6 +139,21 @@ jobs:
           - **Version**: $PARENT_VERSION
           - **GitHub Packages URL**: https://maven.pkg.github.com/$PARENT_OWNER/$PARENT_REPO
           
+          ## ✅ Required Output File
+          
+          Create a file named **`MIGRATION_SUMMARY.md`** in the target repository root.
+          
+          The summary must include:
+          1. Changed files list
+          2. Parent POM change details (old -> new)
+          3. Build commands executed and results
+          4. Test commands executed and results
+          5. Any skipped steps and reason
+          6. Known risks / manual follow-ups
+          
+          If compilation/tests cannot run due to repository access/credentials, still create
+          `MIGRATION_SUMMARY.md` and document the exact failure and next action.
+          
           ---
           
           ## Migration Plan

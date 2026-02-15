@@ -1582,6 +1582,62 @@ checks:
   - "No Undertow dependencies"
 ```
 
+### Rule 18.7 — Generate MIGRATION_SUMMARY.md
+
+```yaml
+priority: CRITICAL
+scope: "**/*"
+description: |
+  Generate a migration summary file in the repository root.
+  This file is required even when compile/test steps fail or are skipped.
+
+action: |
+  CREATE file: MIGRATION_SUMMARY.md
+
+  Required sections:
+  1. Overview
+  2. Parent POM/BOM changes
+  3. Dependency/starter changes
+  4. Source code updates
+  5. Build validation results (commands + pass/fail)
+  6. Test validation results (commands + pass/fail)
+  7. Skipped steps and reasons
+  8. Manual follow-ups
+
+template: |
+  # Migration Summary
+
+  ## Overview
+  - Target: <repo-name>
+  - Migration: Java 21/Spring Boot 3 -> Java 25/Spring Boot 4
+  - Date: <yyyy-mm-dd>
+
+  ## Parent POM/BOM Changes
+  - Parent: <old> -> <new>
+  - Repository source: <github-packages|nexus|local>
+
+  ## Build Validation
+  - Command(s): <commands>
+  - Result: <success|failed|skipped>
+  - Notes: <error or confirmation>
+
+  ## Test Validation
+  - Command(s): <commands>
+  - Result: <success|failed|skipped>
+  - Notes: <error or confirmation>
+
+  ## Files Changed
+  - <file1>
+  - <file2>
+
+  ## Follow-ups
+  - <manual tasks, if any>
+
+validate: |
+  File exists: MIGRATION_SUMMARY.md
+  Includes build/test results and failure/skipped reasons if applicable.
+```
+
 ---
 
 ## Appendix A: Full Import Rewrite Map
