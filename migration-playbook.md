@@ -1,6 +1,6 @@
 # Migration Playbook: Java 21 + Spring Boot 3 → Java 25 + Spring Boot 4
 
-> **Purpose**: Machine-readable migration playbook for manual use or any automation (scripts, CI, or AI-assisted tools). Each rule is self-contained with find/replace patterns, AST-level instructions, and validation criteria. No copilot-instructions or tool-specific files; this playbook is the single contract.
+> **Purpose**: Migration playbook for manual use or any automation (scripts, CI, or AI-assisted tools). Each rule is self-contained with find/replace patterns, AST-level instructions, and validation criteria.
 >
 > **Usage**: Follow the playbook when performing migrations (manually or via your chosen tooling). Rules are tagged with priority, scope, and file-pattern globs so you or your automation can filter relevant rules per file.
 >
@@ -17,28 +17,32 @@
 
 ## Table of Contents
 
+### Core Phases (Required)
 - [0. Meta — How to Use This Playbook](#0-meta--how-to-use-this-playbook)
-- [1. Build Files](#1-build-files)
-- [2. Java Version & Language Features](#2-java-version--language-features)
-- [3. Spring Boot Parent & BOM](#3-spring-boot-parent--bom)
-- [4. Modularized Starters](#4-modularized-starters)
-- [5. Jackson 2 → 3](#5-jackson-2--3)
-- [6. Spring Security 6 → 7](#6-spring-security-6--7)
-- [7. Hibernate 6 → 7 / JPA](#7-hibernate-6--7--jpa)
-- [8. Testing](#8-testing)
-- [9. Configuration Properties](#9-configuration-properties)
-- [10. Spring Batch 5 → 6](#10-spring-batch-5--6)
-- [11. Observability & Actuator](#11-observability--actuator)
-- [12. Resilience (New)](#12-resilience-new)
-- [13. API Versioning (New)](#13-api-versioning-new)
-- [14. HTTP Service Clients (New)](#14-http-service-clients-new)
-- [15. Null Safety — JSpecify](#15-null-safety--jspecify)
-- [16. Removed Features](#16-removed-features)
-- [17. Docker & Deployment](#17-docker--deployment)
-- [18. Validation & Smoke Tests](#18-validation--smoke-tests)
+- [1. Build Files & Parent POM](#1-build-files--parent-pom)
+- [2. Java 25 & Language Features](#2-java-25--language-features)
+- [3. Modularized Starters](#3-modularized-starters)
+- [4. Jackson 2 → 3](#4-jackson-2--3)
+- [5. Spring Security Updates](#5-spring-security-updates)
+- [6. Testing Modernization](#6-testing-modernization)
+- [7. Config Property Renames](#7-config-property-renames)
+- [8. Removed & Deprecated APIs](#8-removed--deprecated-apis)
+- [9. Docker, CI/CD & Validation](#9-docker-cicd--validation)
+
+### Conditional Phases (Add Per App)
+- [C1. Hibernate 6 → 7 / JPA](#c1-hibernate-6--7--jpa)
+- [C2. Spring Batch 5 → 6](#c2-spring-batch-5--6)
+- [C3. Observability & Actuator](#c3-observability--actuator)
+- [C4. Resilience (New)](#c4-resilience-new)
+- [C5. API Versioning (New)](#c5-api-versioning-new)
+- [C6. HTTP Service Clients (New)](#c6-http-service-clients-new)
+- [C7. Null Safety — JSpecify](#c7-null-safety--jspecify)
+
+### Appendices
 - [Appendix A: Full Import Rewrite Map](#appendix-a-full-import-rewrite-map)
 - [Appendix B: Property Rename Map](#appendix-b-property-rename-map)
 - [Appendix C: OpenRewrite Automation](#appendix-c-openrewrite-automation)
+- [Appendix D: Quick Validation Script](#appendix-d-quick-validation-script)
 
 ---
 
@@ -49,7 +53,7 @@
 ```text
 INSTRUCTIONS (for manual use or automation):
 1. Read the entire playbook before making changes.
-2. Process rules in order (Section 1 → 18). Dependencies exist between sections.
+2. Process rules in order (Section 1 → 9, then applicable C1–C7). Dependencies exist between sections.
 3. Each rule has:
    - SCOPE: file glob pattern(s) to match
    - PRIORITY: CRITICAL | HIGH | MEDIUM | LOW
@@ -73,18 +77,17 @@ INSTRUCTIONS (for manual use or automation):
 ### Execution Order
 
 ```text
-Phase 1: Build files (Section 1, 3, 4)        — must compile after this phase
-Phase 2: Import rewrites (Section 5, 6, 7)    — must compile after this phase
-Phase 3: API changes (Section 5–11)            — must compile after this phase
-Phase 4: Test changes (Section 8)              — tests must pass after this phase
-Phase 5: New features (Section 12–15)          — optional, adopt incrementally
-Phase 6: Deployment (Section 16, 17)           — infra changes
-Phase 7: Validation (Section 18)               — final checks
+Phase 1: Build & Dependencies (Sections 1–3)   — must compile after this phase
+Phase 2: Import & API rewrites (Sections 4–5)  — must compile after this phase
+Phase 3: Test modernization (Section 6)         — tests must pass after this phase
+Phase 4: Config & cleanup (Sections 7–8)        — must compile after this phase
+Phase 5: Docker & validation (Section 9)        — final deployment + checks
+Phase 6: Conditional (Sections C1–C7)           — only if app uses these features
 ```
 
 ---
 
-## 1. Build Files
+## 1. Build Files & Parent POM
 
 ### Rule 1.1 — Maven: Update Java Version
 
@@ -154,7 +157,7 @@ validate: "mvn -version shows 3.9+"
 
 ---
 
-## 2. Java Version & Language Features
+## 2. Java 25 & Language Features
 
 ### Rule 2.1 — Adopt Unnamed Variables (Optional)
 
@@ -220,9 +223,9 @@ note: "[MANUAL-REVIEW] Critical for applications using distributed caches with J
 
 ---
 
-## 3. Spring Boot Parent & BOM
+### Spring Boot Parent & BOM
 
-### Rule 3.1 — Maven: Update Parent POM Reference
+### Rule 1.5 — Maven: Update Parent POM Reference
 
 ```yaml
 scope: "**/pom.xml"
@@ -273,7 +276,7 @@ agent_instructions: |
   If you cannot find the parent POM in the repository, STOP and report the issue.
 ```
 
-### Rule 3.2 — Parent POM Configuration (REFERENCE ONLY)
+### Rule 1.6 — Parent POM Configuration (REFERENCE ONLY)
 
 ```yaml
 scope: "N/A - EXTERNAL ARTIFACT"
@@ -315,7 +318,7 @@ agent_instructions: |
   If parent POM is missing, report to the user but DO NOT create it.
 ```
 
-### Rule 3.2.1 — Configure Maven to Resolve Parent POM from GitHub Packages
+### Rule 1.6.1 — Configure Maven to Resolve Parent POM from GitHub Packages
 
 ```yaml
 scope: "Runtime Maven configuration (~/.m2/settings.xml or mvn -s)"
@@ -386,7 +389,7 @@ agent_instructions: |
   7. NEVER commit .mvn/settings.xml in the target repository
 ```
 
-### Rule 3.2.2 — Alternative: Configure Nexus Repository
+### Rule 1.6.2 — Alternative: Configure Nexus Repository
 
 ```yaml
 scope: "Runtime Maven configuration (~/.m2/settings.xml or mvn -s)"
@@ -437,7 +440,7 @@ note: |
   - Compilation will be validated in target repository's CI/CD
 ```
 
-### Rule 3.3 — Gradle: Update Spring Boot Plugin
+### Rule 1.7 — Gradle: Update Spring Boot Plugin
 
 ```yaml
 scope: "**/build.gradle, **/build.gradle.kts"
@@ -446,7 +449,7 @@ find_regex: "id\s*['\"]org\.springframework\.boot['\"]\s*version\s*['\"]3\.\d+\.
 replace: "id 'org.springframework.boot' version '4.0.0'"
 ```
 
-### Rule 3.4 — Remove spring-authorization-server.version Override
+### Rule 1.8 — Remove spring-authorization-server.version Override
 
 ```yaml
 scope: "**/pom.xml, **/build.gradle*"
@@ -456,7 +459,7 @@ find: "spring-authorization-server.version"
 action: "Remove this property. Use spring-security.version instead if version override is needed."
 ```
 
-### Rule 3.5 — Remove Uber-JAR Loader Configuration
+### Rule 1.9 — Remove Uber-JAR Loader Configuration
 
 ```yaml
 scope: "**/pom.xml, **/build.gradle*"
@@ -470,9 +473,9 @@ note: "[MANUAL-REVIEW] Verify build still produces valid executable jar"
 
 ---
 
-## 4. Modularized Starters
+## 3. Modularized Starters
 
-### Rule 4.0 — Quick Migration: Use Classic Starters (Temporary)
+### Rule 3.0 — Quick Migration: Use Classic Starters (Temporary)
 
 ```yaml
 scope: "**/pom.xml, **/build.gradle*"
@@ -489,7 +492,7 @@ actions:
 note: "TEMPORARY — migrate to specific starters when stable"
 ```
 
-### Rule 4.1 — Rename spring-boot-starter-web to webmvc
+### Rule 3.1 — Rename spring-boot-starter-web to webmvc
 
 ```yaml
 scope: "**/pom.xml"
@@ -505,7 +508,7 @@ find_regex: "['\"]org\.springframework\.boot:spring-boot-starter-web['\"]"
 replace: "'org.springframework.boot:spring-boot-starter-webmvc'"
 ```
 
-### Rule 4.2 — Rename spring-boot-starter-aop
+### Rule 3.2 — Rename spring-boot-starter-aop
 
 ```yaml
 scope: "**/pom.xml, **/build.gradle*"
@@ -514,7 +517,7 @@ find: "spring-boot-starter-aop"
 replace: "spring-boot-starter-aspectj"
 ```
 
-### Rule 4.3 — Add Test Starters
+### Rule 3.3 — Add Test Starters
 
 ```yaml
 scope: "**/pom.xml, **/build.gradle*"
@@ -543,7 +546,7 @@ actions: |
   spring-boot-starter-actuator       → ADD spring-boot-starter-actuator-test
 ```
 
-### Rule 4.4 — Spring Batch Starter Split
+### Rule 3.4 — Spring Batch Starter Split
 
 ```yaml
 scope: "**/pom.xml, **/build.gradle*"
@@ -561,7 +564,7 @@ action: |
 note: "[MANUAL-REVIEW] Verify batch job restart/recovery behavior"
 ```
 
-### Rule 4.5 — Full Starter Rename Map
+### Rule 3.5 — Full Starter Rename Map
 
 ```yaml
 scope: "**/pom.xml, **/build.gradle*"
@@ -576,9 +579,9 @@ note: "Most other starters retain their names but now have dedicated test compan
 
 ---
 
-## 5. Jackson 2 → 3
+## 4. Jackson 2 → 3
 
-### Rule 5.1 — Package Rename: com.fasterxml.jackson → tools.jackson
+### Rule 4.1 — Package Rename: com.fasterxml.jackson → tools.jackson
 
 ```yaml
 scope: "**/*.java"
@@ -600,7 +603,7 @@ DO_NOT_CHANGE:
 validate: "No remaining com.fasterxml.jackson imports (except annotation package)"
 ```
 
-### Rule 5.2 — Maven/Gradle: Jackson Group ID
+### Rule 4.2 — Maven/Gradle: Jackson Group ID
 
 ```yaml
 scope: "**/pom.xml, **/build.gradle*"
@@ -621,7 +624,7 @@ note: |
   for Jackson 2, remove them and let Boot's BOM manage versions.
 ```
 
-### Rule 5.3 — ObjectMapper → JsonMapper
+### Rule 4.3 — ObjectMapper → JsonMapper
 
 ```yaml
 scope: "**/*.java"
@@ -639,7 +642,7 @@ note: |
   but JsonMapper is the preferred type. Complex configurations need manual migration.
 ```
 
-### Rule 5.4 — Spring Boot Annotation Renames
+### Rule 4.4 — Spring Boot Annotation Renames
 
 ```yaml
 scope: "**/*.java"
@@ -655,7 +658,7 @@ rewrites:
     import_new: "org.springframework.boot.jackson.JacksonMixin"
 ```
 
-### Rule 5.5 — Jackson Serializer/Deserializer Class Renames
+### Rule 4.5 — Jackson Serializer/Deserializer Class Renames
 
 ```yaml
 scope: "**/*.java"
@@ -673,7 +676,7 @@ rewrites:
 note: "[MANUAL-REVIEW] Review serialize/deserialize method signatures for breaking changes"
 ```
 
-### Rule 5.6 — Jackson 2 ObjectMapperBuilder → Jackson 3 JsonMapper.builder()
+### Rule 4.6 — Jackson 2 ObjectMapperBuilder → Jackson 3 JsonMapper.builder()
 
 ```yaml
 scope: "**/*.java"
@@ -706,7 +709,7 @@ example_after: |
 note: "[MANUAL-REVIEW] Jackson 3 builder API differs — review each method call"
 ```
 
-### Rule 5.7 — Jackson 2 Fallback Mode (Temporary Bridge)
+### Rule 4.7 — Jackson 2 Fallback Mode (Temporary Bridge)
 
 ```yaml
 scope: "**/application.properties, **/application.yml"
@@ -728,7 +731,7 @@ action_yaml: |
 note: "TEMPORARY — remove once all dependencies support Jackson 3"
 ```
 
-### Rule 5.8 — Jackson Module Auto-Discovery
+### Rule 4.8 — Jackson Module Auto-Discovery
 
 ```yaml
 scope: "**/application.properties, **/application.yml, **/*.java"
@@ -743,9 +746,9 @@ action: |
 
 ---
 
-## 6. Spring Security 6 → 7
+## 5. Spring Security Updates
 
-### Rule 6.1 — WebSecurityConfigurerAdapter (Must Be Gone)
+### Rule 5.1 — WebSecurityConfigurerAdapter (Must Be Gone)
 
 ```yaml
 scope: "**/*.java"
@@ -770,7 +773,7 @@ action: |
 validate: "No class in codebase extends WebSecurityConfigurerAdapter"
 ```
 
-### Rule 6.2 — Deprecated authorizeRequests() → authorizeHttpRequests()
+### Rule 5.2 — Deprecated authorizeRequests() → authorizeHttpRequests()
 
 ```yaml
 scope: "**/*.java"
@@ -785,7 +788,7 @@ additional:
 note: "antMatchers and mvcMatchers were deprecated in Security 6, removed in 7"
 ```
 
-### Rule 6.3 — Spring Security Test Dependency
+### Rule 5.3 — Spring Security Test Dependency
 
 ```yaml
 scope: "**/pom.xml, **/build.gradle*"
@@ -801,7 +804,7 @@ action: |
     Gradle: testImplementation 'org.springframework.boot:spring-boot-starter-security-test'
 ```
 
-### Rule 6.4 — CSRF and Security Header Updates
+### Rule 5.4 — CSRF and Security Header Updates
 
 ```yaml
 scope: "**/*.java"
@@ -816,89 +819,9 @@ note: "[MANUAL-REVIEW] Test all authenticated endpoints"
 
 ---
 
-## 7. Hibernate 6 → 7 / JPA
+## 6. Testing Modernization
 
-### Rule 7.1 — Jakarta Persistence 3.2
-
-```yaml
-scope: "**/*.java"
-priority: HIGH
-description: "Hibernate 7 implements Jakarta Persistence 3.2"
-validate: |
-  All JPA imports should already use jakarta.persistence.* (migrated in Boot 3).
-  Verify: grep -r "import javax.persistence" src/ should return nothing.
-```
-
-### Rule 7.2 — Entity Lifecycle: merge() Behavior Change
-
-```yaml
-scope: "**/*.java"
-priority: HIGH
-condition: "Application uses EntityManager.merge() for detached entities"
-description: |
-  Hibernate 7 no longer allows a detached entity to be reassociated with a session 
-  the same way. merge() returns a NEW managed instance — the original remains detached.
-action: |
-  Review all uses of:
-    - entityManager.merge(entity)
-    - session.merge(entity)
-  Ensure code uses the RETURNED entity, not the original:
-    // WRONG:
-    entityManager.merge(entity);
-    entity.setFoo("bar"); // entity is still detached!
-    
-    // CORRECT:
-    entity = entityManager.merge(entity);
-    entity.setFoo("bar"); // entity is now managed
-note: "[MANUAL-REVIEW] Critical — can cause silent data loss"
-```
-
-### Rule 7.3 — Fetch Behavior Changes
-
-```yaml
-scope: "**/*.java"
-priority: HIGH
-description: |
-  Hibernate 7 may change default fetch strategies and SQL generation.
-  Lazy/eager loading behavior may differ from Hibernate 6.
-action: |
-  1. Enable Hibernate SQL logging temporarily: spring.jpa.show-sql=true
-  2. Run integration tests and compare generated SQL
-  3. Review any @Fetch annotations and FetchType overrides
-  4. Test N+1 query scenarios
-note: "[MANUAL-REVIEW] Run full integration test suite with SQL logging"
-```
-
-### Rule 7.4 — Hibernate Configuration Properties
-
-```yaml
-scope: "**/application.properties, **/application.yml"
-priority: MEDIUM
-description: "Several Hibernate configuration keys have been renamed/deprecated"
-action: |
-  Review all properties under:
-    spring.jpa.properties.hibernate.*
-    spring.jpa.hibernate.*
-  Cross-reference with Hibernate 7 migration guide for renamed keys.
-note: "[MANUAL-REVIEW] Check Hibernate 7 release notes for specific key changes"
-```
-
-### Rule 7.5 — open-in-view Warning
-
-```yaml
-scope: "**/application.properties, **/application.yml"
-priority: LOW
-description: "spring.jpa.open-in-view is still supported but discouraged"
-recommendation: |
-  spring.jpa.open-in-view=false
-  This prevents lazy loading in the view layer and improves performance predictability.
-```
-
----
-
-## 8. Testing
-
-### Rule 8.1 — @MockBean → @MockitoBean
+### Rule 6.1 — @MockBean → @MockitoBean
 
 ```yaml
 scope: "**/*.java"
@@ -916,7 +839,7 @@ rewrites:
 validate: "grep -r '@MockBean\|@SpyBean' src/ returns nothing (excluding this playbook)"
 ```
 
-### Rule 8.2 — MockitoTestExecutionListener Removal
+### Rule 6.2 — MockitoTestExecutionListener Removal
 
 ```yaml
 scope: "**/*.java"
@@ -936,7 +859,7 @@ action: "Add @ExtendWith(MockitoExtension.class) to the class"
 import_add: "import org.junit.jupiter.api.extension.ExtendWith; import org.mockito.junit.jupiter.MockitoExtension;"
 ```
 
-### Rule 8.3 — JUnit 4 Removal
+### Rule 6.3 — JUnit 4 Removal
 
 ```yaml
 scope: "**/*.java"
@@ -964,7 +887,7 @@ action: |
 validate: "grep -r 'import org.junit.' src/test/ returns only org.junit.jupiter imports"
 ```
 
-### Rule 8.4 — JUnit 4 Maven/Gradle Dependencies
+### Rule 6.4 — JUnit 4 Maven/Gradle Dependencies
 
 ```yaml
 scope: "**/pom.xml, **/build.gradle*"
@@ -975,7 +898,7 @@ find_patterns:
 action: "Remove JUnit 4 and vintage engine dependencies. JUnit Jupiter is included via spring-boot-starter-test."
 ```
 
-### Rule 8.5 — RestTestClient (New)
+### Rule 6.5 — RestTestClient (New)
 
 ```yaml
 scope: "**/*.java"
@@ -987,7 +910,7 @@ description: |
 note: "Optional — existing WebTestClient usage still works"
 ```
 
-### Rule 8.6 — Testcontainers 2.0
+### Rule 6.6 — Testcontainers 2.0
 
 ```yaml
 scope: "**/*.java, **/pom.xml, **/build.gradle*"
@@ -1004,9 +927,9 @@ action: |
 
 ---
 
-## 9. Configuration Properties
+## 7. Config Property Renames
 
-### Rule 9.1 — Jackson Property Renames
+### Rule 7.1 — Jackson Property Renames
 
 ```yaml
 scope: "**/application.properties, **/application.yml, **/application-*.properties, **/application-*.yml"
@@ -1021,7 +944,7 @@ rewrites:
 validate: "grep -r 'spring.jackson.read\.\|spring.jackson.write\.\|spring.jackson.datetime\.' src/main/resources/ returns nothing"
 ```
 
-### Rule 9.2 — ConfigurationProperties: No Public Field Binding
+### Rule 7.2 — ConfigurationProperties: No Public Field Binding
 
 ```yaml
 scope: "**/*.java"
@@ -1058,7 +981,7 @@ action: |
 validate: "No @ConfigurationProperties class has public non-static non-final fields"
 ```
 
-### Rule 9.3 — MongoDB Property Renames
+### Rule 7.3 — MongoDB Property Renames
 
 ```yaml
 scope: "**/application.properties, **/application.yml"
@@ -1073,7 +996,7 @@ action: |
 note: "[MANUAL-REVIEW] Check release notes for complete MongoDB property rename list"
 ```
 
-### Rule 9.4 — Tracing Property Updates
+### Rule 7.4 — Tracing Property Updates
 
 ```yaml
 scope: "**/application.properties, **/application.yml"
@@ -1084,7 +1007,7 @@ action: "Review all management.tracing.* and management.zipkin.* properties agai
 note: "[MANUAL-REVIEW]"
 ```
 
-### Rule 9.5 — PropertyMapper API Change
+### Rule 7.5 — PropertyMapper API Change
 
 ```yaml
 scope: "**/*.java"
@@ -1100,231 +1023,9 @@ note: "[MANUAL-REVIEW] Review PropertyMapper usage for null-handling correctness
 
 ---
 
-## 10. Spring Batch 5 → 6
+## 8. Removed & Deprecated APIs
 
-### Rule 10.1 — In-Memory Default
-
-```yaml
-scope: "**/application.properties, **/application.yml, **/*.java"
-priority: HIGH
-condition: "Application uses Spring Batch"
-description: |
-  Spring Batch can now operate without a database (in-memory mode).
-  The basic spring-boot-starter-batch uses this simplified mode.
-  On upgrade, Spring Batch will NO LONGER store metadata in your database.
-action: |
-  If you need database-backed batch metadata (job restart, history, etc.):
-    Switch to: spring-boot-starter-batch-jdbc
-  If in-memory is acceptable:
-    Use: spring-boot-starter-batch (no change needed)
-note: "[MANUAL-REVIEW] CRITICAL if you rely on batch job restart after failures"
-```
-
-### Rule 10.2 — RabbitRetryTemplateCustomizer
-
-```yaml
-scope: "**/*.java"
-priority: MEDIUM
-condition: "Application uses RabbitRetryTemplateCustomizer"
-description: "RabbitRetryTemplateCustomizer has been removed"
-action: |
-  Migrate to one of:
-    - RabbitRetryTemplateCustomizer (target-based, if renamed in your version)
-    - Direct RetryTemplate configuration
-  Check Spring AMQP 4.0 migration guide for exact replacement.
-```
-
----
-
-## 11. Observability & Actuator
-
-### Rule 11.1 — Micrometer 2 / Actuator 4
-
-```yaml
-scope: "**/application.properties, **/application.yml, **/*.java"
-priority: MEDIUM
-description: |
-  Spring Boot 4 ships with Micrometer 2 and Actuator 4.
-  Unified metrics, logs, and traces with minimal setup.
-  @MeterTag is now supported on @Counted and @Timed methods with SpEL.
-action: |
-  1. Review custom MeterRegistry configurations
-  2. Review actuator endpoint exposure settings
-  3. HttpMessageConverters is deprecated — update if you customized it for actuator
-  4. Optional actuator endpoint parameters must use JSpecify @Nullable (not @OptionalParameter)
-```
-
-### Rule 11.2 — @OptionalParameter Removed
-
-```yaml
-scope: "**/*.java"
-priority: HIGH
-condition: "Application has custom actuator endpoints"
-find: "@OptionalParameter"
-replace: "@Nullable"
-import_add: "import org.jspecify.annotations.Nullable;"
-import_remove: "import org.springframework.boot.actuate.endpoint.annotation.OptionalParameter;"
-```
-
-### Rule 11.3 — HttpMessageConverters Deprecation
-
-```yaml
-scope: "**/*.java"
-priority: MEDIUM
-find: "HttpMessageConverters"
-description: |
-  HttpMessageConverters is deprecated in favor of Spring Framework 7's improved support.
-  Review any custom HttpMessageConverter configurations.
-note: "[MANUAL-REVIEW] Not yet removed, but plan migration"
-```
-
----
-
-## 12. Resilience (New)
-
-### Rule 12.1 — Native @Retryable (Spring Framework 7)
-
-```yaml
-scope: "**/*.java"
-priority: LOW
-condition: "Application uses Resilience4j or Spring Retry for retry logic"
-description: |
-  Spring Framework 7 includes built-in resilience features:
-    @Retryable — declarative retry with exponential backoff and jitter
-    @ConcurrencyLimit — declarative concurrency control
-    RetryTemplate — programmatic retry
-  These reduce or eliminate the need for Resilience4j or Spring Retry.
-example: |
-  @Service
-  public class ExternalApiService {
-      @Retryable(
-          includes = GatewayTimeoutException.class,
-          maxAttempts = 3,
-          backoff = @Backoff(delay = 500, multiplier = 2)
-      )
-      @ConcurrencyLimit(5)
-      public ApiResponse callExternal(String key) {
-          return client.get(key);
-      }
-  }
-note: |
-  [MANUAL-REVIEW] Optional adoption. Evaluate whether to replace Resilience4j.
-  For reactive methods, retry logic automatically decorates the Reactor pipeline.
-```
-
----
-
-## 13. API Versioning (New)
-
-### Rule 13.1 — Native API Versioning
-
-```yaml
-scope: "**/*.java"
-priority: LOW
-description: |
-  Spring Boot 4 / Spring Framework 7 adds first-class API versioning.
-  Supports: path, header, query parameter, and media type strategies.
-  No more custom filters or URL-based version hacks needed.
-example: |
-  @RestController
-  @RequestMapping("/api/users")
-  @ApiVersion("1")
-  public class UserControllerV1 {
-      @GetMapping
-      public List<UserDtoV1> getUsers() { ... }
-  }
-  
-  @RestController
-  @RequestMapping("/api/users")
-  @ApiVersion("2")
-  public class UserControllerV2 {
-      @GetMapping
-      public List<UserDtoV2> getUsers() { ... }
-  }
-  
-  // Or version at the method level:
-  @GetMapping(url = "/accounts/{id}", version = "1.1")
-  public Account getAccount(@PathVariable String id) { ... }
-note: "Optional — adopt when ready. Built-in deprecation handling per RFC 9745."
-```
-
----
-
-## 14. HTTP Service Clients (New)
-
-### Rule 14.1 — Declarative HTTP Clients
-
-```yaml
-scope: "**/*.java"
-priority: LOW
-condition: "Application uses OpenFeign or manual RestTemplate/WebClient wrappers"
-description: |
-  Spring Boot 4 supports declarative HTTP service clients via @HttpServiceClient.
-  Consider adopting to replace OpenFeign or manual HTTP client code.
-example: |
-  @HttpServiceClient(
-      name = "user-service",
-      url = "${clients.user-service.base-url}"
-  )
-  public interface UserServiceClient {
-      @GetMapping("/users/{id}")
-      UserDto getUser(@PathVariable Long id);
-      
-      @PostMapping("/users")
-      UserDto createUser(@RequestBody CreateUserRequest request);
-  }
-note: "Optional — evaluate as replacement for OpenFeign or manual RestClient wrappers"
-```
-
----
-
-## 15. Null Safety — JSpecify
-
-### Rule 15.1 — JSR-305 to JSpecify Migration
-
-```yaml
-scope: "**/*.java"
-priority: MEDIUM
-description: |
-  Spring Framework 7 migrates from JSR-305 to JSpecify annotations for null safety.
-  Your code may reference JSR-305 annotations that should be updated.
-rewrites:
-  - find: "import javax.annotation.Nullable"
-    replace: "import org.jspecify.annotations.Nullable"
-  - find: "import javax.annotation.Nonnull"
-    replace: "import org.jspecify.annotations.NonNull"
-  - find: "import org.springframework.lang.Nullable"
-    replace: "import org.jspecify.annotations.Nullable"
-  - find: "import org.springframework.lang.NonNull"
-    replace: "import org.jspecify.annotations.NonNull"
-note: |
-  [MANUAL-REVIEW] JSpecify annotations have slightly different semantics.
-  Kotlin users benefit automatically — API nullability is now accurately inferred.
-  IntelliJ IDEA 2025.3+ provides full support.
-```
-
-### Rule 15.2 — Add JSpecify Dependency (if not transitively included)
-
-```yaml
-scope: "**/pom.xml, **/build.gradle*"
-priority: MEDIUM
-condition: "Using @Nullable / @NonNull annotations directly"
-action: |
-  Maven:
-    <dependency>
-      <groupId>org.jspecify</groupId>
-      <artifactId>jspecify</artifactId>
-    </dependency>
-  Gradle:
-    implementation 'org.jspecify:jspecify'
-  Note: Version managed by Spring Boot 4 BOM.
-```
-
----
-
-## 16. Removed Features
-
-### Rule 16.1 — Undertow Server Removal
+### Rule 8.1 — Undertow Server Removal
 
 ```yaml
 scope: "**/pom.xml, **/build.gradle*, **/*.java, **/application.properties, **/application.yml"
@@ -1342,7 +1043,7 @@ replacement: |
   For Tomcat: No action needed (it's the default)
 ```
 
-### Rule 16.2 — Executable Launch Scripts
+### Rule 8.2 — Executable Launch Scripts
 
 ```yaml
 scope: "**/pom.xml, **/build.gradle*"
@@ -1354,7 +1055,7 @@ find_patterns:
 action: "Remove executable launch script configuration. Use java -jar to run."
 ```
 
-### Rule 16.3 — Spock Test Framework
+### Rule 8.3 — Spock Test Framework
 
 ```yaml
 scope: "**/*.groovy, **/pom.xml, **/build.gradle*"
@@ -1364,7 +1065,7 @@ description: "Spring Boot's Spock integration is removed (incompatible with Groo
 action: "Migrate Spock tests to JUnit Jupiter"
 ```
 
-### Rule 16.4 — Spring Session Hazelcast/MongoDB
+### Rule 8.4 — Spring Session Hazelcast/MongoDB
 
 ```yaml
 scope: "**/pom.xml, **/build.gradle*"
@@ -1376,7 +1077,7 @@ description: |
 action: "Update to the community-maintained dependencies"
 ```
 
-### Rule 16.5 — Spring JCL Logging Bridge
+### Rule 8.5 — Spring JCL Logging Bridge
 
 ```yaml
 scope: "**/pom.xml, **/build.gradle*"
@@ -1385,7 +1086,7 @@ description: "Spring JCL logging bridge is removed in favor of Apache Commons Lo
 action: "Remove explicit spring-jcl dependencies if present. Commons Logging is used automatically."
 ```
 
-### Rule 16.6 — Auto-Configuration Class Visibility
+### Rule 8.6 — Auto-Configuration Class Visibility
 
 ```yaml
 scope: "**/*.java"
@@ -1401,9 +1102,9 @@ note: "[MANUAL-REVIEW]"
 
 ---
 
-## 17. Docker & Deployment
+## 9. Docker, CI/CD & Validation
 
-### Rule 17.1 — Base Image Update
+### Rule 9.1 — Base Image Update
 
 ```yaml
 scope: "**/Dockerfile, **/docker-compose*.yml, **/*.yaml"
@@ -1418,7 +1119,7 @@ rewrites:
     note: "openjdk Docker images are deprecated; switch to eclipse-temurin or amazoncorretto"
 ```
 
-### Rule 17.2 — GraalVM Native Image
+### Rule 9.2 — GraalVM Native Image
 
 ```yaml
 scope: "**/pom.xml, **/build.gradle*"
@@ -1432,7 +1133,7 @@ action: |
   4. Review AOT compilation settings
 ```
 
-### Rule 17.3 — Servlet Container Compatibility
+### Rule 9.3 — Servlet Container Compatibility
 
 ```yaml
 scope: "**/pom.xml, **/build.gradle*, **/server.xml, **/web.xml"
@@ -1447,7 +1148,7 @@ description: |
 action: "Verify external container version meets Servlet 6.1 requirement"
 ```
 
-### Rule 17.4 — CI/CD Pipeline Updates
+### Rule 9.4 — CI/CD Pipeline Updates
 
 ```yaml
 scope: "**/.github/workflows/*.yml, **/Jenkinsfile, **/.gitlab-ci.yml, **/azure-pipelines.yml"
@@ -1465,9 +1166,9 @@ actions:
 
 ---
 
-## 18. Validation & Smoke Tests
+### Validation & Smoke Tests
 
-### Rule 18.1 — Compilation Check
+### Rule 9.5 — Compilation Check
 
 ```yaml
 priority: CRITICAL
@@ -1517,7 +1218,7 @@ agent_instructions: |
   5. If parent POM resolution fails despite settings, SKIP compilation gracefully
 ```
 
-### Rule 18.2 — Test Suite
+### Rule 9.6 — Test Suite
 
 ```yaml
 priority: CRITICAL
@@ -1532,7 +1233,7 @@ common_failures:
   - "Hibernate query changes → Apply Rule 7.3"
 ```
 
-### Rule 18.3 — Startup Smoke Test
+### Rule 9.7 — Startup Smoke Test
 
 ```yaml
 priority: CRITICAL
@@ -1544,7 +1245,7 @@ checks:
   - "Application context loads all beans without circular dependency errors"
 ```
 
-### Rule 18.4 — JSON Serialization Smoke Test
+### Rule 9.8 — JSON Serialization Smoke Test
 
 ```yaml
 priority: HIGH
@@ -1556,7 +1257,7 @@ checks:
   - "API contract tests (if any) pass"
 ```
 
-### Rule 18.5 — Performance Baseline Comparison
+### Rule 9.9 — Performance Baseline Comparison
 
 ```yaml
 priority: MEDIUM
@@ -1567,7 +1268,7 @@ checks:
   - "GC pause times: compare JFR recordings"
 ```
 
-### Rule 18.6 — Dependency Audit
+### Rule 9.10 — Dependency Audit
 
 ```yaml
 priority: MEDIUM
@@ -1582,7 +1283,7 @@ checks:
   - "No Undertow dependencies"
 ```
 
-### Rule 18.7 — Generate MIGRATION_SUMMARY.md
+### Rule 9.11 — Generate MIGRATION_SUMMARY.md
 
 ```yaml
 priority: CRITICAL
@@ -1640,11 +1341,321 @@ validate: |
 
 ---
 
+---
+
+# Conditional Phases — Apply Only If Your App Uses These Features
+
+## C1. Hibernate 6 → 7 / JPA [CONDITIONAL]
+
+### Rule C1.1 — Jakarta Persistence 3.2
+
+```yaml
+scope: "**/*.java"
+priority: HIGH
+description: "Hibernate 7 implements Jakarta Persistence 3.2"
+validate: |
+  All JPA imports should already use jakarta.persistence.* (migrated in Boot 3).
+  Verify: grep -r "import javax.persistence" src/ should return nothing.
+```
+
+### Rule C1.2 — Entity Lifecycle: merge() Behavior Change
+
+```yaml
+scope: "**/*.java"
+priority: HIGH
+condition: "Application uses EntityManager.merge() for detached entities"
+description: |
+  Hibernate 7 no longer allows a detached entity to be reassociated with a session 
+  the same way. merge() returns a NEW managed instance — the original remains detached.
+action: |
+  Review all uses of:
+    - entityManager.merge(entity)
+    - session.merge(entity)
+  Ensure code uses the RETURNED entity, not the original:
+    // WRONG:
+    entityManager.merge(entity);
+    entity.setFoo("bar"); // entity is still detached!
+    
+    // CORRECT:
+    entity = entityManager.merge(entity);
+    entity.setFoo("bar"); // entity is now managed
+note: "[MANUAL-REVIEW] Critical — can cause silent data loss"
+```
+
+### Rule C1.3 — Fetch Behavior Changes
+
+```yaml
+scope: "**/*.java"
+priority: HIGH
+description: |
+  Hibernate 7 may change default fetch strategies and SQL generation.
+  Lazy/eager loading behavior may differ from Hibernate 6.
+action: |
+  1. Enable Hibernate SQL logging temporarily: spring.jpa.show-sql=true
+  2. Run integration tests and compare generated SQL
+  3. Review any @Fetch annotations and FetchType overrides
+  4. Test N+1 query scenarios
+note: "[MANUAL-REVIEW] Run full integration test suite with SQL logging"
+```
+
+### Rule C1.4 — Hibernate Configuration Properties
+
+```yaml
+scope: "**/application.properties, **/application.yml"
+priority: MEDIUM
+description: "Several Hibernate configuration keys have been renamed/deprecated"
+action: |
+  Review all properties under:
+    spring.jpa.properties.hibernate.*
+    spring.jpa.hibernate.*
+  Cross-reference with Hibernate 7 migration guide for renamed keys.
+note: "[MANUAL-REVIEW] Check Hibernate 7 release notes for specific key changes"
+```
+
+### Rule C1.5 — open-in-view Warning
+
+```yaml
+scope: "**/application.properties, **/application.yml"
+priority: LOW
+description: "spring.jpa.open-in-view is still supported but discouraged"
+recommendation: |
+  spring.jpa.open-in-view=false
+  This prevents lazy loading in the view layer and improves performance predictability.
+```
+
+---
+
+
+
+## C2. Spring Batch 5 → 6 [CONDITIONAL]
+
+### Rule C2.1 — In-Memory Default
+
+```yaml
+scope: "**/application.properties, **/application.yml, **/*.java"
+priority: HIGH
+condition: "Application uses Spring Batch"
+description: |
+  Spring Batch can now operate without a database (in-memory mode).
+  The basic spring-boot-starter-batch uses this simplified mode.
+  On upgrade, Spring Batch will NO LONGER store metadata in your database.
+action: |
+  If you need database-backed batch metadata (job restart, history, etc.):
+    Switch to: spring-boot-starter-batch-jdbc
+  If in-memory is acceptable:
+    Use: spring-boot-starter-batch (no change needed)
+note: "[MANUAL-REVIEW] CRITICAL if you rely on batch job restart after failures"
+```
+
+### Rule C2.2 — RabbitRetryTemplateCustomizer
+
+```yaml
+scope: "**/*.java"
+priority: MEDIUM
+condition: "Application uses RabbitRetryTemplateCustomizer"
+description: "RabbitRetryTemplateCustomizer has been removed"
+action: |
+  Migrate to one of:
+    - RabbitRetryTemplateCustomizer (target-based, if renamed in your version)
+    - Direct RetryTemplate configuration
+  Check Spring AMQP 4.0 migration guide for exact replacement.
+```
+
+---
+
+## C3. Observability & Actuator [CONDITIONAL]
+
+### Rule C3.1 — Micrometer 2 / Actuator 4
+
+```yaml
+scope: "**/application.properties, **/application.yml, **/*.java"
+priority: MEDIUM
+description: |
+  Spring Boot 4 ships with Micrometer 2 and Actuator 4.
+  Unified metrics, logs, and traces with minimal setup.
+  @MeterTag is now supported on @Counted and @Timed methods with SpEL.
+action: |
+  1. Review custom MeterRegistry configurations
+  2. Review actuator endpoint exposure settings
+  3. HttpMessageConverters is deprecated — update if you customized it for actuator
+  4. Optional actuator endpoint parameters must use JSpecify @Nullable (not @OptionalParameter)
+```
+
+### Rule C3.2 — @OptionalParameter Removed
+
+```yaml
+scope: "**/*.java"
+priority: HIGH
+condition: "Application has custom actuator endpoints"
+find: "@OptionalParameter"
+replace: "@Nullable"
+import_add: "import org.jspecify.annotations.Nullable;"
+import_remove: "import org.springframework.boot.actuate.endpoint.annotation.OptionalParameter;"
+```
+
+### Rule C3.3 — HttpMessageConverters Deprecation
+
+```yaml
+scope: "**/*.java"
+priority: MEDIUM
+find: "HttpMessageConverters"
+description: |
+  HttpMessageConverters is deprecated in favor of Spring Framework 7's improved support.
+  Review any custom HttpMessageConverter configurations.
+note: "[MANUAL-REVIEW] Not yet removed, but plan migration"
+```
+
+---
+
+## C4. Resilience (New) [CONDITIONAL]
+
+### Rule C4.1 — Native @Retryable (Spring Framework 7)
+
+```yaml
+scope: "**/*.java"
+priority: LOW
+condition: "Application uses Resilience4j or Spring Retry for retry logic"
+description: |
+  Spring Framework 7 includes built-in resilience features:
+    @Retryable — declarative retry with exponential backoff and jitter
+    @ConcurrencyLimit — declarative concurrency control
+    RetryTemplate — programmatic retry
+  These reduce or eliminate the need for Resilience4j or Spring Retry.
+example: |
+  @Service
+  public class ExternalApiService {
+      @Retryable(
+          includes = GatewayTimeoutException.class,
+          maxAttempts = 3,
+          backoff = @Backoff(delay = 500, multiplier = 2)
+      )
+      @ConcurrencyLimit(5)
+      public ApiResponse callExternal(String key) {
+          return client.get(key);
+      }
+  }
+note: |
+  [MANUAL-REVIEW] Optional adoption. Evaluate whether to replace Resilience4j.
+  For reactive methods, retry logic automatically decorates the Reactor pipeline.
+```
+
+---
+
+## C5. API Versioning (New) [CONDITIONAL]
+
+### Rule C5.1 — Native API Versioning
+
+```yaml
+scope: "**/*.java"
+priority: LOW
+description: |
+  Spring Boot 4 / Spring Framework 7 adds first-class API versioning.
+  Supports: path, header, query parameter, and media type strategies.
+  No more custom filters or URL-based version hacks needed.
+example: |
+  @RestController
+  @RequestMapping("/api/users")
+  @ApiVersion("1")
+  public class UserControllerV1 {
+      @GetMapping
+      public List<UserDtoV1> getUsers() { ... }
+  }
+  
+  @RestController
+  @RequestMapping("/api/users")
+  @ApiVersion("2")
+  public class UserControllerV2 {
+      @GetMapping
+      public List<UserDtoV2> getUsers() { ... }
+  }
+  
+  // Or version at the method level:
+  @GetMapping(url = "/accounts/{id}", version = "1.1")
+  public Account getAccount(@PathVariable String id) { ... }
+note: "Optional — adopt when ready. Built-in deprecation handling per RFC 9745."
+```
+
+---
+
+## C6. HTTP Service Clients (New) [CONDITIONAL]
+
+### Rule C6.1 — Declarative HTTP Clients
+
+```yaml
+scope: "**/*.java"
+priority: LOW
+condition: "Application uses OpenFeign or manual RestTemplate/WebClient wrappers"
+description: |
+  Spring Boot 4 supports declarative HTTP service clients via @HttpServiceClient.
+  Consider adopting to replace OpenFeign or manual HTTP client code.
+example: |
+  @HttpServiceClient(
+      name = "user-service",
+      url = "${clients.user-service.base-url}"
+  )
+  public interface UserServiceClient {
+      @GetMapping("/users/{id}")
+      UserDto getUser(@PathVariable Long id);
+      
+      @PostMapping("/users")
+      UserDto createUser(@RequestBody CreateUserRequest request);
+  }
+note: "Optional — evaluate as replacement for OpenFeign or manual RestClient wrappers"
+```
+
+---
+
+## C7. Null Safety — JSpecify [CONDITIONAL]
+
+### Rule C7.1 — JSR-305 to JSpecify Migration
+
+```yaml
+scope: "**/*.java"
+priority: MEDIUM
+description: |
+  Spring Framework 7 migrates from JSR-305 to JSpecify annotations for null safety.
+  Your code may reference JSR-305 annotations that should be updated.
+rewrites:
+  - find: "import javax.annotation.Nullable"
+    replace: "import org.jspecify.annotations.Nullable"
+  - find: "import javax.annotation.Nonnull"
+    replace: "import org.jspecify.annotations.NonNull"
+  - find: "import org.springframework.lang.Nullable"
+    replace: "import org.jspecify.annotations.Nullable"
+  - find: "import org.springframework.lang.NonNull"
+    replace: "import org.jspecify.annotations.NonNull"
+note: |
+  [MANUAL-REVIEW] JSpecify annotations have slightly different semantics.
+  Kotlin users benefit automatically — API nullability is now accurately inferred.
+  IntelliJ IDEA 2025.3+ provides full support.
+```
+
+### Rule C7.2 — Add JSpecify Dependency (if not transitively included)
+
+```yaml
+scope: "**/pom.xml, **/build.gradle*"
+priority: MEDIUM
+condition: "Using @Nullable / @NonNull annotations directly"
+action: |
+  Maven:
+    <dependency>
+      <groupId>org.jspecify</groupId>
+      <artifactId>jspecify</artifactId>
+    </dependency>
+  Gradle:
+    implementation 'org.jspecify:jspecify'
+  Note: Version managed by Spring Boot 4 BOM.
+```
+
+---
+
+
+
 ## Appendix A: Full Import Rewrite Map
 
 ```text
 # ══════════════════════════════════════════════════════════════════
-# JACKSON IMPORTS (Section 5)
+# JACKSON IMPORTS (Section 4)
 # ══════════════════════════════════════════════════════════════════
 com.fasterxml.jackson.databind.*              → tools.jackson.databind.*
 com.fasterxml.jackson.core.*                  → tools.jackson.core.*
@@ -1654,7 +1665,7 @@ com.fasterxml.jackson.module.*                → tools.jackson.module.*
 com.fasterxml.jackson.annotation.*            → NO CHANGE (stays same)
 
 # ══════════════════════════════════════════════════════════════════
-# SPRING BOOT JACKSON ANNOTATIONS (Section 5)
+# SPRING BOOT JACKSON ANNOTATIONS (Section 4)
 # ══════════════════════════════════════════════════════════════════
 o.s.boot.jackson.JsonComponent                → o.s.boot.jackson.JacksonComponent
 o.s.boot.jackson.JsonMixin                    → o.s.boot.jackson.JacksonMixin
@@ -1662,7 +1673,7 @@ o.s.boot.jackson.JsonObjectSerializer         → o.s.boot.jackson.ObjectValueSe
 o.s.boot.jackson.JsonObjectDeserializer       → o.s.boot.jackson.ObjectValueDeserializer
 
 # ══════════════════════════════════════════════════════════════════
-# TESTING IMPORTS (Section 8)
+# TESTING IMPORTS (Section 6)
 # ══════════════════════════════════════════════════════════════════
 o.s.boot.test.mock.mockito.MockBean           → o.s.test.context.bean.override.mockito.MockitoBean
 o.s.boot.test.mock.mockito.SpyBean            → o.s.test.context.bean.override.mockito.MockitoSpyBean
@@ -1679,7 +1690,7 @@ org.junit.runner.RunWith                      → org.junit.jupiter.api.extensio
 org.junit.runners.Parameterized               → org.junit.jupiter.params.ParameterizedTest
 
 # ══════════════════════════════════════════════════════════════════
-# NULL SAFETY (Section 15)
+# NULL SAFETY (Section C7)
 # ══════════════════════════════════════════════════════════════════
 javax.annotation.Nullable                     → org.jspecify.annotations.Nullable
 javax.annotation.Nonnull                      → org.jspecify.annotations.NonNull
@@ -1687,7 +1698,7 @@ org.springframework.lang.Nullable             → org.jspecify.annotations.Nulla
 org.springframework.lang.NonNull              → org.jspecify.annotations.NonNull
 
 # ══════════════════════════════════════════════════════════════════
-# ACTUATOR (Section 11)
+# ACTUATOR (Section C3)
 # ══════════════════════════════════════════════════════════════════
 o.s.boot.actuate.endpoint.annotation.OptionalParameter → org.jspecify.annotations.Nullable
 ```

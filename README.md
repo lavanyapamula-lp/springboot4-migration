@@ -4,7 +4,7 @@ Minimal, playbook-driven migration toolkit for issue-based migrations. No copilo
 
 ## What This Repository Contains
 
-- `.github/workflows/springboot-java-migration.yml` - Workflow that creates a migration issue in the target repository.
+- `.github/workflows/springboot-java-migration-playbook.yml` - Workflow that creates a migration issue in the target repository.
 - `migration-playbook.md` - Canonical migration rules and validation steps.
 - `config/parent-pom-config.yml` - Parent POM coordinates and GitHub Packages source.
 - `SpringBoot4-Migration-Strategy-Slides.md` - Slide content for the migration strategy (use to build or update the deck).
