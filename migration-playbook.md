@@ -85,9 +85,35 @@ Phase 5: Docker & validation (Section 9)        — final deployment + checks
 Phase 6: Conditional (Sections C1–C7)           — only if app uses these features
 ```
 
+### Migration Scopes
+
+The workflow accepts a `migration_scope` input that controls which phases to execute.
+Default scope is **`full`**.
+
+```text
+┌──────────────────┬──────────────────────────────────────────────────────────┬────────────────────────────────────────┐
+│ Scope            │ Sections Executed                                        │ When to Use                            │
+├──────────────────┼──────────────────────────────────────────────────────────┼────────────────────────────────────────┤
+│ full (default)   │ All 9 core phases (1–9) + applicable conditionals (C1–C7)│ Complete migration in one pass          │
+│ build-files-only │ Sections 1–3 (Build, Java, Starters)                     │ Quick win — validate build compiles     │
+│ imports-only     │ Sections 4–5 (Jackson 2→3, Spring Security)              │ After build passes — fix compilation    │
+│ test-fixes-only  │ Section 6 (Testing Modernization)                        │ After compile passes — fix test suite   │
+│ config-only      │ Sections 7–8 (Config Properties, Removed APIs)           │ Property renames + deprecated cleanup   │
+│ deploy-only      │ Section 9 (Docker, CI/CD & Validation)                   │ Final deployment + smoke tests          │
+│ custom           │ As specified in custom_instructions input                 │ Targeted fixes for specific issues      │
+└──────────────────┴──────────────────────────────────────────────────────────┴────────────────────────────────────────┘
+```
+
+**Scope filtering rules:**
+1. If `migration_scope` is `full` or not set → execute all sections in order (1–9, then C1–C7 if applicable).
+2. If a specific scope is set → execute ONLY the listed sections. Skip all others.
+3. Conditional sections (C1–C7) are ONLY included when scope is `full` and the codebase uses that feature.
+4. The `custom` scope ignores section numbers entirely and follows `custom_instructions` input.
+
 ---
 
 ## 1. Build Files & Parent POM
+<!-- scope: full, build-files-only -->
 
 ### Rule 1.1 — Maven: Update Java Version
 
@@ -158,6 +184,7 @@ validate: "mvn -version shows 3.9+"
 ---
 
 ## 2. Java 25 & Language Features
+<!-- scope: full, build-files-only -->
 
 ### Rule 2.1 — Adopt Unnamed Variables (Optional)
 
@@ -474,6 +501,7 @@ note: "[MANUAL-REVIEW] Verify build still produces valid executable jar"
 ---
 
 ## 3. Modularized Starters
+<!-- scope: full, build-files-only -->
 
 ### Rule 3.0 — Quick Migration: Use Classic Starters (Temporary)
 
@@ -580,6 +608,7 @@ note: "Most other starters retain their names but now have dedicated test compan
 ---
 
 ## 4. Jackson 2 → 3
+<!-- scope: full, imports-only -->
 
 ### Rule 4.1 — Package Rename: com.fasterxml.jackson → tools.jackson
 
@@ -747,6 +776,7 @@ action: |
 ---
 
 ## 5. Spring Security Updates
+<!-- scope: full, imports-only -->
 
 ### Rule 5.1 — WebSecurityConfigurerAdapter (Must Be Gone)
 
@@ -820,6 +850,7 @@ note: "[MANUAL-REVIEW] Test all authenticated endpoints"
 ---
 
 ## 6. Testing Modernization
+<!-- scope: full, test-fixes-only -->
 
 ### Rule 6.1 — @MockBean → @MockitoBean
 
@@ -928,6 +959,7 @@ action: |
 ---
 
 ## 7. Config Property Renames
+<!-- scope: full, config-only -->
 
 ### Rule 7.1 — Jackson Property Renames
 
@@ -1024,6 +1056,7 @@ note: "[MANUAL-REVIEW] Review PropertyMapper usage for null-handling correctness
 ---
 
 ## 8. Removed & Deprecated APIs
+<!-- scope: full, config-only -->
 
 ### Rule 8.1 — Undertow Server Removal
 
@@ -1100,9 +1133,51 @@ action: |
 note: "[MANUAL-REVIEW]"
 ```
 
+### Rule 8.7 — Java 25 Removed APIs: Finalization & Legacy Thread Endpoints
+
+```yaml
+scope: "**/*.java"
+priority: CRITICAL
+condition: "Code uses Runtime.runFinalization(), Object.finalize(), or exposes endpoints that demonstrate them"
+description: |
+  In Java 25 the following are REMOVED (not just deprecated):
+  - Runtime.runFinalization()
+  - Object.finalize() (overriding in classes)
+  - Thread.stop(), Thread.suspend(), Thread.resume() (already removed in earlier JDK)
+  Any call to these will not compile on Java 25.
+action: |
+  1. Runtime.runFinalization(): Remove the call. If the method exists only to demonstrate
+     this API, remove the method and any controller/endpoint that calls it
+     (e.g. @GetMapping "runFinalization" -> remove the method and the endpoint).
+  2. Object.finalize(): Remove the override and any manual invocation. Do not call
+     super.finalize(). Remove controller endpoints that call finalize() on a service
+     (e.g. @GetMapping "finalize" that calls service.finalize() -> remove the endpoint
+     and the finalize() override from the service).
+  3. Endpoints that only demonstrate legacy thread methods (e.g. "legacyThreads"):
+     If the underlying service method no longer uses stop/suspend/resume and only
+     demonstrates modern interruption, you may keep the endpoint. If the endpoint
+     or method name suggests removed APIs, either remove the endpoint and the
+     demo method, or rename and document that it now demonstrates modern thread
+     interruption only.
+  4. Remove @SuppressWarnings({"deprecation", "removal"}) from methods that
+     previously called runFinalization() or finalize(); remove those methods entirely
+     instead of suppressing.
+find_patterns:
+  - "Runtime.getRuntime().runFinalization()"
+  - "runFinalization()"
+  - "@Override finalize()"
+  - "@GetMapping.*runFinalization|@GetMapping.*finalize"
+  - "demonstrateFinalization()"
+  - "\.finalize()"
+replace_behavior: "Remove the usage, the method, and the controller endpoint that invokes it."
+validate: "Project compiles on Java 25 and no references to runFinalization, finalize(), or demo endpoints for them remain."
+note: "[MANUAL-REVIEW] — Confirm no production code relied on finalization."
+```
+
 ---
 
 ## 9. Docker, CI/CD & Validation
+<!-- scope: full, deploy-only -->
 
 ### Rule 9.1 — Base Image Update
 
@@ -1346,6 +1421,7 @@ validate: |
 # Conditional Phases — Apply Only If Your App Uses These Features
 
 ## C1. Hibernate 6 → 7 / JPA [CONDITIONAL]
+<!-- scope: full (conditional) -->
 
 ### Rule C1.1 — Jakarta Persistence 3.2
 
@@ -1428,6 +1504,7 @@ recommendation: |
 
 
 ## C2. Spring Batch 5 → 6 [CONDITIONAL]
+<!-- scope: full (conditional) -->
 
 ### Rule C2.1 — In-Memory Default
 
@@ -1464,6 +1541,7 @@ action: |
 ---
 
 ## C3. Observability & Actuator [CONDITIONAL]
+<!-- scope: full (conditional) -->
 
 ### Rule C3.1 — Micrometer 2 / Actuator 4
 
@@ -1508,6 +1586,7 @@ note: "[MANUAL-REVIEW] Not yet removed, but plan migration"
 ---
 
 ## C4. Resilience (New) [CONDITIONAL]
+<!-- scope: full (conditional) -->
 
 ### Rule C4.1 — Native @Retryable (Spring Framework 7)
 
@@ -1542,6 +1621,7 @@ note: |
 ---
 
 ## C5. API Versioning (New) [CONDITIONAL]
+<!-- scope: full (conditional) -->
 
 ### Rule C5.1 — Native API Versioning
 
@@ -1578,6 +1658,7 @@ note: "Optional — adopt when ready. Built-in deprecation handling per RFC 9745
 ---
 
 ## C6. HTTP Service Clients (New) [CONDITIONAL]
+<!-- scope: full (conditional) -->
 
 ### Rule C6.1 — Declarative HTTP Clients
 
@@ -1606,6 +1687,7 @@ note: "Optional — evaluate as replacement for OpenFeign or manual RestClient w
 ---
 
 ## C7. Null Safety — JSpecify [CONDITIONAL]
+<!-- scope: full (conditional) -->
 
 ### Rule C7.1 — JSR-305 to JSpecify Migration
 
