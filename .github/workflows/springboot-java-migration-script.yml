@@ -1,0 +1,92 @@
+name: "Spring Boot 4 - Java 25 Migration (Script)"
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_repo:
+        description: "Repo to migrate (org/repo)"
+        required: true
+      parent_repo:
+        description: "Repository for the Parent POM"
+        required: true
+        default: "lavanyapamula-lp/springboot-test-parent" # 👈 Adjust this to your actual parent repo
+      parent_branch:
+        description: "Branch of the Parent POM"
+        required: true
+        default: "migration-2.0.0" # 👈 The branch where 2.0.0-SNAPSHOT exists
+      parent_version:
+        description: "New version of the Parent Library"
+        required: true
+        default: "2.0.0-SNAPSHOT"
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Migration Toolkit (this repo)
+        uses: actions/checkout@v4
+        with:
+          path: migration-toolkit
+
+      - name: Checkout Parent Library
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.parent_repo }}
+          ref: ${{ inputs.parent_branch }}
+          token: ${{ secrets.PAT_TOKEN }}
+          path: parent-library
+
+      # ── NEW STEP: Install Parent Library Locally ───────────────────────
+      - name: Install Parent POM
+        run: |
+          cd parent-library
+          mvn clean install -N  # -N (Non-recursive) installs just the parent POM fast
+          echo "✅ Installed Parent POM to local .m2 cache"
+
+      - name: Checkout Target App
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.target_repo }}
+          token: ${{ secrets.PAT_TOKEN }}
+          path: target-app
+
+      - name: Setup Java 25
+        uses: actions/setup-java@v4
+        with:
+          java-version: '25'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      # ── STEP 1: Update Parent Reference ────────────────────────────────
+      - name: "📦 Update Custom Parent Library"
+        working-directory: target-app
+        run: |
+          # Updates 1.0.0 to 2.0.0-SNAPSHOT for your specific parent artifact
+          perl -i -0pe "s|(<artifactId>spring-boot-mongodb-parent</artifactId>\s*<version>).*?(</version>)|\${1}${PARENT_VERSION}\${2}|g" pom.xml
+          echo "✅ Parent version forced to ${PARENT_VERSION}"
+        env:
+          PARENT_VERSION: ${{ inputs.parent_version }}
+
+      # ── STEP 2: OpenRewrite (AST Transformation) ─────────────────────
+      - name: Run OpenRewrite
+        working-directory: target-app
+        run: |
+          mvn -U org.openrewrite.maven:rewrite-maven-plugin:run \
+            -Drewrite.recipeArtifactCoordinates=org.openrewrite.recipe:rewrite-spring:LATEST \
+            -Drewrite.activeRecipes=org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_3
+
+      # ── STEP 3: Run migrate.sh (playbook / phases) ───────────────────
+      - name: "📖 Run migrate.sh"
+        working-directory: target-app
+        run: |
+          chmod +x ../migration-toolkit/migrate.sh
+          ../migration-toolkit/migrate.sh
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          path: target-app
+          token: ${{ secrets.PAT_TOKEN }}
+          commit-message: "chore: migrate to Spring Boot 4 and Java 25"
+          title: "🚀 Migration: Spring Boot 4 / Java 25"
+          body: "Updated parent to ${{ inputs.parent_version }} and applied playbook rules."

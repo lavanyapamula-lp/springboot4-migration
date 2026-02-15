@@ -1,6 +1,6 @@
 # Migration Playbook: Java 21 + Spring Boot 3 → Java 25 + Spring Boot 4
 
-> **Purpose**: Machine-readable migration playbook for manual use or any automation (scripts, CI, or AI-assisted tools). Each rule is self-contained with find/replace patterns, AST-level instructions, and validation criteria. No copilot-instructions or tool-specific files; this playbook is the single contract.
+> **Purpose**: Migration playbook for manual use or any automation (scripts, CI, or AI-assisted tools). Each rule is self-contained with find/replace patterns, AST-level instructions, and validation criteria.
 >
 > **Usage**: Follow the playbook when performing migrations (manually or via your chosen tooling). Rules are tagged with priority, scope, and file-pattern globs so you or your automation can filter relevant rules per file.
 >
