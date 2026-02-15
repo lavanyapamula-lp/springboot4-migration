@@ -315,6 +315,124 @@ agent_instructions: |
   If parent POM is missing, report to the user but DO NOT create it.
 ```
 
+### Rule 3.2.1 — Configure Maven to Resolve Parent POM from GitHub Packages
+
+```yaml
+scope: "**/.mvn/settings.xml"
+priority: CRITICAL
+condition: "Parent POM is published to GitHub Packages"
+description: |
+  Configure Maven to resolve the parent POM from GitHub Packages.
+  This enables compilation and testing during migration in GitHub environments.
+
+action: |
+  CREATE file: .mvn/settings.xml
+  
+  <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+            xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0
+                                https://maven.apache.org/xsd/settings-1.0.0.xsd">
+      <servers>
+          <server>
+              <id>github</id>
+              <username>${env.GITHUB_ACTOR}</username>
+              <password>${env.GITHUB_TOKEN}</password>
+          </server>
+      </servers>
+      
+      <profiles>
+          <profile>
+              <id>github-packages</id>
+              <repositories>
+                  <repository>
+                      <id>github</id>
+                      <url>https://maven.pkg.github.com/OWNER/REPO</url>
+                      <releases><enabled>true</enabled></releases>
+                      <snapshots>
+                          <enabled>true</enabled>
+                          <updatePolicy>always</updatePolicy>
+                      </snapshots>
+                  </repository>
+              </repositories>
+          </profile>
+      </profiles>
+      
+      <activeProfiles>
+          <activeProfile>github-packages</activeProfile>
+      </activeProfiles>
+  </settings>
+  
+  Replace:
+  - OWNER: GitHub organization/user (e.g., yourorg)
+  - REPO: Parent POM repository name (e.g., springboot-test-parent)
+  
+  Example: https://maven.pkg.github.com/yourorg/springboot-test-parent
+
+validation: |
+  Test parent POM resolution with:
+  export GITHUB_ACTOR="github-username"
+  export GITHUB_TOKEN="ghp_your_token"
+  mvn dependency:tree
+
+agent_instructions: |
+  REQUIRED STEP before running mvn compile:
+  1. Create .mvn/settings.xml with GitHub Packages configuration
+  2. Environment variables GITHUB_ACTOR and GITHUB_TOKEN must be available
+  3. In GitHub Actions, GITHUB_TOKEN is automatically available
+  4. For GitHub Copilot agent, use available GitHub credentials
+  5. Test with: mvn dependency:get -Dartifact=com.example:springboot-test-parent:2.0.0-SNAPSHOT:pom
+```
+
+### Rule 3.2.2 — Alternative: Configure Nexus Repository
+
+```yaml
+scope: "**/.mvn/settings.xml"
+priority: CRITICAL
+condition: "Parent POM is published to private Nexus/Artifactory"
+description: |
+  If parent POM is in a private Maven repository (Nexus/Artifactory),
+  configure Maven to access it.
+
+action: |
+  CREATE file: .mvn/settings.xml
+  
+  <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">
+      <servers>
+          <server>
+              <id>nexus</id>
+              <username>${env.NEXUS_USERNAME}</username>
+              <password>${env.NEXUS_PASSWORD}</password>
+          </server>
+      </servers>
+      
+      <profiles>
+          <profile>
+              <id>nexus</id>
+              <repositories>
+                  <repository>
+                      <id>nexus</id>
+                      <url>https://nexus.yourcompany.com/repository/maven-public/</url>
+                      <releases><enabled>true</enabled></releases>
+                      <snapshots><enabled>true</enabled></snapshots>
+                  </repository>
+              </repositories>
+          </profile>
+      </profiles>
+      
+      <activeProfiles>
+          <activeProfile>nexus</activeProfile>
+      </activeProfiles>
+  </settings>
+
+note: |
+  [CONDITIONAL]
+  If you are a GitHub Copilot agent and cannot access private Nexus:
+  - Apply all migration rules
+  - SKIP compilation (mvn compile)
+  - Document in summary: "Compilation skipped - requires Nexus credentials"
+  - Compilation will be validated in target repository's CI/CD
+```
+
 ### Rule 3.3 — Gradle: Update Spring Boot Plugin
 
 ```yaml
@@ -1349,11 +1467,50 @@ actions:
 
 ```yaml
 priority: CRITICAL
+description: |
+  Verify the application compiles with all migration changes.
+  
+  AGENT INSTRUCTIONS:
+  Before running mvn compile, ensure parent POM can be resolved:
+  1. Check if .mvn/settings.xml exists (created in Rule 3.2.1 or 3.2.2)
+  2. Verify GITHUB_TOKEN or NEXUS credentials are available
+  3. If parent POM resolution fails, SKIP compilation and document this
+
 commands:
-  maven: "mvn clean compile -DskipTests"
+  maven: |
+    # First, verify parent POM is resolvable
+    mvn dependency:get \
+      -Dartifact=com.example:springboot-test-parent:2.0.0-SNAPSHOT:pom \
+      -DremoteRepositories=github::https://maven.pkg.github.com/OWNER/REPO
+    
+    # If successful, compile
+    mvn clean compile -DskipTests
+    
   gradle: "./gradlew clean compileJava"
+  
 expected: "BUILD SUCCESS with zero errors"
-on_failure: "Fix compilation errors before proceeding. Most common: missing imports after Jackson/starter changes."
+
+on_failure: |
+  ERROR: "Could not resolve parent POM"
+  → Check .mvn/settings.xml exists
+  → Verify GITHUB_TOKEN environment variable is set
+  → Try: export GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}"
+  → If still fails and you are an agent, SKIP and document:
+    "⚠️ Compilation skipped - parent POM requires authentication.
+     All code changes applied successfully.
+     Compilation will be validated in target repository's CI/CD."
+  
+  ERROR: Other compilation errors
+  → Fix compilation errors before proceeding
+  → Most common: missing imports after Jackson/starter changes
+
+agent_instructions: |
+  If running in GitHub environment:
+  1. GITHUB_TOKEN is available as environment variable
+  2. GITHUB_ACTOR is your GitHub username
+  3. Create .mvn/settings.xml before compiling (Rule 3.2.1)
+  4. Run compilation
+  5. If parent POM resolution fails despite settings, SKIP compilation gracefully
 ```
 
 ### Rule 18.2 — Test Suite

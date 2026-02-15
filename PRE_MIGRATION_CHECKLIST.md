@@ -4,25 +4,68 @@ Before running the Spring Boot 4 migration workflow on a target repository, ensu
 
 ---
 
-## ✅ 1. Parent POM Availability
+## ✅ 1. Parent POM Availability & Configuration
 
-### If Using a Custom Parent POM (e.g., spring-boot-mongodb-parent):
+### If Using a Custom Parent POM (e.g., springboot-test-parent):
 
-The migration assumes your parent POM is **already migrated to Spring Boot 4** and available from:
+The migration assumes your parent POM is **already migrated to Spring Boot 4** and available from one of these sources:
 
-**Option A: Maven Repository (Recommended for Production)**
-- Parent POM is published to your organization's Maven repository (Nexus/Artifactory/etc.)
+#### Option A: GitHub Packages (✅ Recommended for GitHub Copilot Agent)
+
+**Requirements:**
+- Parent POM published to GitHub Packages: `https://maven.pkg.github.com/OWNER/REPO`
 - Version `2.0.0-SNAPSHOT` (or your migrated version) exists
-- Target repositories can resolve it via `<repositories>` configuration or settings.xml
+- Target repositories have GitHub token with `read:packages` permission
 
-**Option B: Local .m2 (For Development/Testing)**
-- Parent POM is installed in local Maven repository: `~/.m2/repository/`
-- Run: `mvn install` in your parent POM project first
-- Note: This only works for local testing, not CI/CD
+**Verification:**
+```bash
+export GITHUB_ACTOR="your-username"
+export GITHUB_TOKEN="ghp_your_token_here"  # or use secrets.GITHUB_TOKEN in Actions
 
-**Option C: GitHub Packages/Maven Central**
-- Parent POM is published to GitHub Packages or Maven Central
-- Authentication configured in settings.xml if required
+mvn dependency:get \
+  -Dartifact=com.example:springboot-test-parent:2.0.0-SNAPSHOT:pom \
+  -DremoteRepositories=github::https://maven.pkg.github.com/yourorg/springboot-test-parent
+```
+
+**How Agent Will Compile:**
+1. Agent creates `.mvn/settings.xml` with GitHub Packages configuration (Rule 3.2.1)
+2. Uses `GITHUB_TOKEN` for authentication (automatically available in GitHub Actions)
+3. Maven resolves parent POM from GitHub Packages
+4. Compilation succeeds ✅
+
+#### Option B: Maven Repository (Nexus/Artifactory)
+
+**Requirements:**
+- Parent POM published to your organization's Maven repository
+- Version `2.0.0-SNAPSHOT` exists
+- Repository allows anonymous read OR credentials are configured
+
+**Verification:**
+```bash
+mvn dependency:get \
+  -Dartifact=com.example:springboot-test-parent:2.0.0-SNAPSHOT:pom \
+  -DremoteRepositories=nexus::https://nexus.yourcompany.com/repository/maven-snapshots/
+```
+
+**How Agent Will Compile:**
+- ⚠️ **Agent cannot access private Nexus without credentials**
+- Agent will skip compilation and document this
+- Compilation validated in target repository's CI/CD (which has credentials)
+
+**To enable agent compilation:**
+- Configure Nexus to allow anonymous read access for parent POM repository, OR
+- Add `.mvn/settings.xml` to target repositories with Nexus configuration (Rule 3.2.2)
+
+#### Option C: Local .m2 (For Development/Testing Only)
+
+**Requirements:**
+- Parent POM installed in local Maven repository: `~/.m2/repository/`
+- Run: `mvn install` in your parent POM project
+
+**Usage:**
+- ✅ Works for local development
+- ❌ Does NOT work for CI/CD or GitHub Copilot agent
+- Use for testing migration locally only
 
 ### Parent POM Requirements:
 
@@ -81,7 +124,7 @@ Before migration, verify your target repository:
 ### Does NOT Contain Parent POM
 ```bash
 # These should NOT exist in target repo:
-# ❌ spring-boot-mongodb-parent/pom.xml
+# ❌ springboot-test-parent/pom.xml
 # ❌ parent-pom/pom.xml
 ```
 
@@ -175,7 +218,7 @@ cd <target-repo>
 
 # Ensure parent POM is available
 mvn dependency:get \
-  -Dartifact=com.example:spring-boot-mongodb-parent:2.0.0-SNAPSHOT:pom \
+  -Dartifact=com.example:springboot-test-parent:2.0.0-SNAPSHOT:pom \
   -DremoteRepositories=<your-nexus-url>
 
 # Apply migration manually or via Copilot
@@ -226,7 +269,7 @@ After migration completes:
 **Solution:**
 1. Verify parent POM is published to your Maven repository
 2. Check `~/.m2/settings.xml` for correct repository configuration
-3. Try: `mvn dependency:get -Dartifact=com.example:spring-boot-mongodb-parent:2.0.0-SNAPSHOT:pom`
+3. Try: `mvn dependency:get -Dartifact=com.example:springboot-test-parent:2.0.0-SNAPSHOT:pom`
 
 ### "Agent Created Parent POM in Repository"
 

@@ -9,7 +9,7 @@ on:
       parent_repo:
         description: "Repository for the Parent POM"
         required: true
-        default: "Siri1990/spring-boot-mongodb-parent" # 👈 Adjust this to your actual parent repo
+        default: "Siri1990/springboot-test-parent" # 👈 Adjust this to your actual parent repo
       parent_branch:
         description: "Branch of the Parent POM"
         required: true
@@ -63,7 +63,7 @@ jobs:
         working-directory: target-app
         run: |
           # Updates 1.0.0 to 2.0.0-SNAPSHOT for your specific parent artifact
-          perl -i -0pe "s|(<artifactId>spring-boot-mongodb-parent</artifactId>\s*<version>).*?(</version>)|\${1}${PARENT_VERSION}\${2}|g" pom.xml
+          perl -i -0pe "s|(<artifactId>springboot-test-parent</artifactId>\s*<version>).*?(</version>)|\${1}${PARENT_VERSION}\${2}|g" pom.xml
           echo "✅ Parent version forced to ${PARENT_VERSION}"
         env:
           PARENT_VERSION: ${{ inputs.parent_version }}

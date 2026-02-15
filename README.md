@@ -42,28 +42,36 @@
 springboot4-migration/
 ├── .github/
 │   └── workflows/
-│       ├── migrate-target-repo.yml      # The main workflow
-│       └── copilot-migrate-repo.yml     # Copilot-based migration workflow
-├── scripts/
-│   ├── migrate.sh                       # Mechanical migration script
-│   ├── validate.sh                      # Post-migration validation
-│   └── generate-pr-body.sh              # PR description generator
+│       ├── migrate-target-repo.yml       # Main automated workflow
+│       └── copilot-migrate-repo.yml      # Copilot-based workflow (creates issue)
 ├── config/
-│   ├── openrewrite-init.gradle          # Gradle OpenRewrite init script
-│   └── copilot-instructions.md          # Copilot instructions (copied to target)
-├── migration-playbook.md                # Full playbook reference
-├── PRE_MIGRATION_CHECKLIST.md           # Prerequisites before migration
-└── README.md                            # This file
+│   ├── parent-pom-config.yml             # ⭐ Parent POM configuration (edit this!)
+│   ├── maven-settings-github-packages.xml # Maven settings template
+│   ├── openrewrite-init.gradle           # Gradle OpenRewrite init script
+│   └── copilot-instructions.md           # Copilot instructions
+├── scripts/
+│   ├── migrate.sh                        # Mechanical migration script
+│   ├── validate.sh                       # Post-migration validation
+│   └── generate-pr-body.sh               # PR description generator
+├── migration-playbook.md                 # Full playbook reference
+├── PRE_MIGRATION_CHECKLIST.md            # Prerequisites before migration
+├── GITHUB_PACKAGES_SETUP.md              # How to publish parent POM to GitHub Packages
+└── README.md                             # This file
 ```
+
+### Key Configuration File
+
+**`config/parent-pom-config.yml`** - Edit this file once with your organization's parent POM details. All workflows automatically use this configuration.
 
 ## Prerequisites
 
 Before migrating any target repository, ensure:
 
-1. **Parent POM (if used)** is already migrated to Spring Boot 4 and available:
-   - Published to your Maven repository (Nexus/Artifactory), OR
-   - Installed in local .m2 for testing: `mvn install`
-   - **The agent will NOT create parent POMs** — they must exist externally
+1. **Parent POM (if used)** is already migrated to Spring Boot 4 and published to **GitHub Packages**:
+   - Published at: `https://maven.pkg.github.com/OWNER/REPO`
+   - Version: `2.0.0-SNAPSHOT` (or your target version)
+   - **Why GitHub Packages?** The agent can authenticate using `GITHUB_TOKEN` automatically
+   - See `GITHUB_PACKAGES_SETUP.md` for publishing instructions
 
 2. **Java 25** is installed in your CI/CD environment and locally
 
@@ -72,6 +80,13 @@ Before migrating any target repository, ensure:
 4. Target repository has a clean working directory (no uncommitted changes)
 
 📋 **See `PRE_MIGRATION_CHECKLIST.md` for full details**
+
+### Alternative: Nexus/Artifactory
+
+If your parent POM is in private Nexus:
+- ⚠️ Agent cannot access private Nexus (no credentials)
+- Agent will apply code changes but skip compilation
+- Compilation validated in your CI/CD (which has credentials)
 
 ---
 
@@ -85,7 +100,33 @@ gh repo create YOUR_ORG/springboot4-migration --private --clone
 cd springboot4-migration
 ```
 
-### Step 2: Create a Personal Access Token (PAT) or GitHub App
+---
+
+### Step 2: Configure Parent POM Details (One-Time Setup)
+
+**⭐ IMPORTANT**: Edit `config/parent-pom-config.yml` with your organization's parent POM details:
+
+```yaml
+parent_pom:
+  owner: "yourorg"                         # Change to your GitHub org
+  repository: "springboot-test-parent" # Change to your parent POM repo
+  groupId: "com.example"                   # Change to your groupId
+  artifactId: "springboot-test-parent" # Change to your artifactId
+  version: "2.0.0-SNAPSHOT"                # Your migrated version
+```
+
+**Commit this file:**
+```bash
+git add config/parent-pom-config.yml
+git commit -m "Configure parent POM details for organization"
+git push
+```
+
+**This configuration will be automatically used by all workflows - no need to enter these details when triggering migrations!**
+
+---
+
+### Step 3: Create a Personal Access Token (PAT) or GitHub App
 
 The workflow needs to clone, push, and create PRs on **other** repositories.
 You have two options:
@@ -116,14 +157,14 @@ You have two options:
 4. Generate a private key
 5. Note the App ID and Installation ID
 
-### Step 3: Add the Secret to the Migration Repo
+### Step 4: Add the Secret to the Migration Repo
 
 Go to **springboot4-migration** repo → Settings → Secrets and Variables → Actions:
 
-- For PAT: Add secret named `TARGET_REPO_TOKEN` with the PAT value
+- For PAT: Add secret named `MIGRATION_PAT` with the PAT value
 - For GitHub App: Add secrets `APP_ID` and `APP_PRIVATE_KEY`
 
-### Step 4: Copy All Files Into the Repo
+### Step 5: Copy All Files Into the Repo
 
 ```bash
 # Create directory structure
@@ -138,11 +179,42 @@ git commit -m "Initial migration toolkit setup"
 git push origin main
 ```
 
-### Step 5: Run the Migration
+## Quick Start
 
-⚠️ **BEFORE STARTING**: Complete the `PRE_MIGRATION_CHECKLIST.md`
+### 1. Configure Your Parent POM (One-Time Setup)
 
-**Option A: Automated Workflow**
+Edit `config/parent-pom-config.yml` with your organization's details:
+
+```yaml
+parent_pom:
+  owner: "yourorg"                              # Your GitHub org/user
+  repository: "springboot-test-parent"      # Parent POM repo name
+  groupId: "com.example"
+  artifactId: "springboot-test-parent"
+  version: "2.0.0-SNAPSHOT"
+```
+
+**This configuration is used automatically by all migration workflows.**
+
+---
+
+## Running the Migration
+
+### Option A: Automated Workflow
+
+1. Go to **springboot4-migration** repo → **Actions** tab
+2. Click **"🚀 Migrate Target Repository"**
+3. Enter only the target repository: `your-org/your-app`
+4. Parent POM details are **automatically loaded** from `config/parent-pom-config.yml`
+5. Workflow:
+   - Clones target repo
+   - Applies migration rules
+   - Runs tests
+   - Creates PR with changes
+
+---
+
+### Option B: Copilot-Based Workflow (Recommended for GitHub Packages)
 
 1. Go to **springboot4-migration** repo → **Actions** tab
 2. Click **"🚀 Migrate Target Repository"**
@@ -159,18 +231,29 @@ The workflow will:
 3. Push a migration branch to the target repo
 4. Create a draft PR on the target repo with a detailed summary
 
-**Option B: Copilot-Based Workflow**
+**Option B: Copilot-Based Workflow** (Recommended for GitHub Packages)
 
 1. Go to **Actions** → **"Copilot Migration Trigger"**
-2. Enter target repository: `your-org/your-app`
-3. Creates an issue on the target repo with the migration playbook
-4. Copilot agent applies the migration automatically
-5. Review the changes and create a PR
+2. Enter only the target repository: `your-org/your-app`
+3. Parent POM details are **automatically loaded** from `config/parent-pom-config.yml`
+4. Workflow creates an issue on the target repo with:
+   - Full migration playbook
+   - Maven settings template pre-configured with your parent POM URL
+   - Parent POM coordinates (groupId, artifactId, version)
+5. Copilot agent:
+   - Applies migration rules
+   - Creates `.mvn/settings.xml` with your GitHub Packages configuration
+   - Resolves parent POM from GitHub Packages using `GITHUB_TOKEN`
+   - Compiles application successfully ✅
+6. Review the changes and create a PR
 
-**Note**: Copilot workflow is designed for repositories where:
-- Parent POM is external (in Nexus/Maven repo)
-- Agent should only update version references
-- No parent POM creation is needed
+**How Parent POM is Resolved:**
+- Agent creates `.mvn/settings.xml` pointing to: `https://maven.pkg.github.com/{owner}/{repository}`
+- Maven uses `GITHUB_TOKEN` (auto-available in GitHub Actions)
+- Parent POM downloaded automatically
+- Compilation succeeds without manual configuration
+
+**No Manual Input Required** - All parent POM details come from `config/parent-pom-config.yml`
 
 ### Step 6: Review the PR on the Target Repo
 

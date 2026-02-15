@@ -29,12 +29,36 @@ This repository is **actively being migrated** from:
 
 ### ⚠️ Important: External Dependencies
 
-**DO NOT create or modify parent POM files** (e.g., `spring-boot-mongodb-parent`).  
+**DO NOT create or modify parent POM files** (e.g., `springboot-test-parent`).  
 Parent POMs are external artifacts managed separately and published to:
+- GitHub Packages: `https://maven.pkg.github.com/OWNER/REPO`
 - Organization's Maven repository (Nexus/Artifactory)
 - Local .m2 repository (for development)
 
 **ONLY update** the `<version>` element in `<parent>` sections of child POMs.
+
+### 🔧 Before Compilation: Configure Maven Repository Access
+
+**CRITICAL**: Create `.mvn/settings.xml` to resolve parent POM from GitHub Packages:
+
+1. Create file: `.mvn/settings.xml`
+2. Use template from: `config/maven-settings-github-packages.xml`
+3. Replace `OWNER/REPOSITORY` with actual GitHub org/repo
+4. Ensure `GITHUB_TOKEN` environment variable is available
+
+**Example:**
+```xml
+<repositories>
+    <repository>
+        <id>github</id>
+        <url>https://maven.pkg.github.com/yourorg/springboot-test-parent</url>
+    </repository>
+</repositories>
+```
+
+**Environment Variables:**
+- `GITHUB_ACTOR`: Your GitHub username (auto-set in GitHub Actions)
+- `GITHUB_TOKEN`: Token with `read:packages` permission (auto-available in Actions)
 
 ---
 
