@@ -28,7 +28,7 @@ parent_pom:
   repository: "springboot-test-parent"
   groupId: "com.example"
   artifactId: "springboot-test-parent"
-  version: "2.0.0"
+  version: "7.0.0"
 ```
 
 2. Add repository secret in this repo:
