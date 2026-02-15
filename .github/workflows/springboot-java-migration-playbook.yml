@@ -28,11 +28,14 @@ on:
 jobs:
   create-migration-issue:
     runs-on: ubuntu-latest
+    outputs:
+      playbook_summary_url: ${{ steps.prepare-issue.outputs.playbook_summary_url }}
     steps:
       - name: "📥 Checkout Migration Repository"
         uses: actions/checkout@v4
 
       - name: "🏷️ Ensure Labels and Prepare Migration Issue"
+        id: prepare-issue
         env:
           GH_TOKEN: ${{ secrets.MIGRATION_PAT }}
           TARGET_REPO: ${{ inputs.target_repository }}
@@ -208,18 +211,31 @@ jobs:
           esac
           echo "" >> final-issue.md
 
-          # 5. Add branch-specific playbook links
-          PLAYBOOK_BLOB_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/migration-playbook.md"
-          PLAYBOOK_RAW_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/raw/${GITHUB_REF_NAME}/migration-playbook.md"
-          echo "Adding branch-specific playbook links: $PLAYBOOK_BLOB_URL"
+          # 5. Add playbook links (summary stays under 64k token limit; full is for reference)
+          PLAYBOOK_SUMMARY_BLOB="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/migration-playbook-summary.md"
+          PLAYBOOK_SUMMARY_RAW="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/raw/${GITHUB_REF_NAME}/migration-playbook-summary.md"
+          PLAYBOOK_FULL_BLOB="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/migration-playbook.md"
+          echo "Adding playbook links (summary + full)"
+          # Machine-parseable: automation can grep for PLAYBOOK_SUMMARY_RAW_URL to fetch the summary (stays under 64k tokens)
+          echo "" >> final-issue.md
+          echo "PLAYBOOK_SUMMARY_RAW_URL=${PLAYBOOK_SUMMARY_RAW}" >> final-issue.md
+          echo "" >> final-issue.md
           cat >> final-issue.md << ISSUE_EOF3
 
-          The full migration playbook is in this branch:
-          - View: ${PLAYBOOK_BLOB_URL}
-          - Raw: ${PLAYBOOK_RAW_URL}
+          ## Playbook (use summary to stay under token/prompt limits)
 
-          Use this branch-specific playbook (not main).
+          **For automation / AI (64k token limit):** Use the **summary** only. The issue body contains a line \`PLAYBOOK_SUMMARY_RAW_URL=<url>\` — fetch that URL as the playbook content.
+          - View: ${PLAYBOOK_SUMMARY_BLOB}
+          - Raw: ${PLAYBOOK_SUMMARY_RAW}
+
+          **For full rule text (find/replace, validate):** Open when needed per section:
+          - Full playbook: ${PLAYBOOK_FULL_BLOB}
+
+          Use this branch (not main).
           ISSUE_EOF3
+
+          # Expose summary URL for any automation that reads workflow outputs
+          echo "playbook_summary_url=${PLAYBOOK_SUMMARY_RAW}" >> $GITHUB_OUTPUT
 
       - name: "🚀 Create Migration Issue"
         env:
