@@ -4,7 +4,7 @@
 >
 > **Usage**: Point Copilot at this file as context when performing migrations. Rules are tagged with priority, scope, and file-pattern globs so agents can filter relevant rules per file.
 >
-> ⚠️ **BEFORE STARTING**: Review `PRE_MIGRATION_CHECKLIST.md` to ensure:
+> ⚠️ **BEFORE STARTING**: Ensure prerequisites are met:
 > - Parent POM (if used) is published to Maven repository or local .m2
 > - Java 25 is installed and configured
 > - Repository structure is compatible
