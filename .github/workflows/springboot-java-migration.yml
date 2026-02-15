@@ -1,4 +1,4 @@
-name: Migration Trigger
+name: Spring Boot / Java Migration
 on:
   workflow_dispatch:
     inputs:
