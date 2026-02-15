@@ -63,37 +63,37 @@ jobs:
 
           # 3. Create Maven settings template for GitHub Packages
           cat > maven-settings-template.xml << 'SETTINGS_EOF'
-<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">
-    <servers>
-        <server>
-            <id>github</id>
-            <username>${env.GITHUB_ACTOR}</username>
-            <password>${env.GITHUB_TOKEN}</password>
-        </server>
-    </servers>
-    
-    <profiles>
-        <profile>
-            <id>github</id>
-            <repositories>
-                <repository>
-                    <id>github</id>
-                    <url>https://maven.pkg.github.com/PARENT_OWNER/PARENT_REPO</url>
-                    <releases><enabled>true</enabled></releases>
-                    <snapshots>
-                        <enabled>true</enabled>
-                        <updatePolicy>always</updatePolicy>
-                    </snapshots>
-                </repository>
-            </repositories>
-        </profile>
-    </profiles>
-    
-    <activeProfiles>
-        <activeProfile>github</activeProfile>
-    </activeProfiles>
-</settings>
-SETTINGS_EOF
+          <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">
+              <servers>
+                  <server>
+                      <id>github</id>
+                      <username>${env.GITHUB_ACTOR}</username>
+                      <password>${env.GITHUB_TOKEN}</password>
+                  </server>
+              </servers>
+              
+              <profiles>
+                  <profile>
+                      <id>github</id>
+                      <repositories>
+                          <repository>
+                              <id>github</id>
+                              <url>https://maven.pkg.github.com/PARENT_OWNER/PARENT_REPO</url>
+                              <releases><enabled>true</enabled></releases>
+                              <snapshots>
+                                  <enabled>true</enabled>
+                                  <updatePolicy>always</updatePolicy>
+                              </snapshots>
+                          </repository>
+                      </repositories>
+                  </profile>
+              </profiles>
+              
+              <activeProfiles>
+                  <activeProfile>github</activeProfile>
+              </activeProfiles>
+          </settings>
+          SETTINGS_EOF
 
           # Replace placeholders with actual config values
           sed -i "s|PARENT_OWNER|$PARENT_OWNER|g" maven-settings-template.xml
@@ -101,49 +101,49 @@ SETTINGS_EOF
 
           # 4. Create comprehensive issue body with actual parent POM details
           cat > final-issue.md << ISSUE_EOF
-# Migration Task: Spring Boot 4 + Java 25
-
-@copilot please analyze this repository and apply the following migration plan.
-
-## 🔧 Setup Required Before Compilation
-
-The parent POM must be resolved from GitHub Packages. **Before running \`mvn compile\`, create this file:**
-
-**File: \`.mvn/settings.xml\`**
-
-\`\`\`xml
-ISSUE_EOF
+          # Migration Task: Spring Boot 4 + Java 25
+          
+          @copilot please analyze this repository and apply the following migration plan.
+          
+          ## 🔧 Setup Required Before Compilation
+          
+          The parent POM must be resolved from GitHub Packages. **Before running \`mvn compile\`, create this file:**
+          
+          **File: \`.mvn/settings.xml\`**
+          
+          \`\`\`xml
+          ISSUE_EOF
 
           # Insert the settings template with actual values
           cat maven-settings-template.xml >> final-issue.md
           
           cat >> final-issue.md << ISSUE_EOF2
-\`\`\`
-
-**Environment Variables Needed:**
-- \`GITHUB_ACTOR\`: Your GitHub username (automatically set in GitHub Actions)
-- \`GITHUB_TOKEN\`: Your GitHub token with \`read:packages\` permission (automatically available)
-
-**Test parent POM resolution:**
-\`\`\`bash
-export GITHUB_ACTOR="your-username"
-export GITHUB_TOKEN="ghp_your_token_here"
-mvn dependency:get -Dartifact=$PARENT_GROUP_ID:$PARENT_ARTIFACT_ID:$PARENT_VERSION:pom
-\`\`\`
-
-If this succeeds, proceed with \`mvn clean compile\`.
-
-**Parent POM Details (from config):**
-- **GroupId**: $PARENT_GROUP_ID
-- **ArtifactId**: $PARENT_ARTIFACT_ID
-- **Version**: $PARENT_VERSION
-- **GitHub Packages URL**: https://maven.pkg.github.com/$PARENT_OWNER/$PARENT_REPO
-
----
-
-## Migration Plan
-
-ISSUE_EOF2
+          \`\`\`
+          
+          **Environment Variables Needed:**
+          - \`GITHUB_ACTOR\`: Your GitHub username (automatically set in GitHub Actions)
+          - \`GITHUB_TOKEN\`: Your GitHub token with \`read:packages\` permission (automatically available)
+          
+          **Test parent POM resolution:**
+          \`\`\`bash
+          export GITHUB_ACTOR="your-username"
+          export GITHUB_TOKEN="ghp_your_token_here"
+          mvn dependency:get -Dartifact=$PARENT_GROUP_ID:$PARENT_ARTIFACT_ID:$PARENT_VERSION:pom
+          \`\`\`
+          
+          If this succeeds, proceed with \`mvn clean compile\`.
+          
+          **Parent POM Details (from config):**
+          - **GroupId**: $PARENT_GROUP_ID
+          - **ArtifactId**: $PARENT_ARTIFACT_ID
+          - **Version**: $PARENT_VERSION
+          - **GitHub Packages URL**: https://maven.pkg.github.com/$PARENT_OWNER/$PARENT_REPO
+          
+          ---
+          
+          ## Migration Plan
+          
+          ISSUE_EOF2
 
           # 5. Append local playbook from the checked-out branch/ref
           echo "Appending local migration-playbook.md from current workflow ref"
