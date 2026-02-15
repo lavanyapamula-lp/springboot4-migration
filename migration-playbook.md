@@ -266,7 +266,7 @@ description: |
   - Available in local .m2 repository for development
   - Managed in a separate repository
   
-  The parent POM (version 2.0.0) already:
+  The parent POM (version 7.0.0) already:
   - Inherits from spring-boot-starter-parent:4.0.0
   - Configures java.version=25
   - Sets maven.compiler.source/target/release=25
@@ -282,7 +282,7 @@ replace: |
   <parent>
     <groupId>com.example</groupId>
     <artifactId>springboot-test-parent</artifactId>
-    <version>2.0.0</version>
+    <version>7.0.0</version>
 
 pre_requisite: |
   EXTERNAL DEPENDENCY - NOT PART OF THIS MIGRATION:
@@ -291,7 +291,7 @@ pre_requisite: |
   2. Local .m2 repository (for development/testing)
   
   If parent POM is not available, the migration will fail at compile time.
-  Contact your DevOps team to ensure parent POM 2.0.0 is published.
+  Contact your DevOps team to ensure parent POM 7.0.0 is published.
 
 validate: |
   mvn dependency:tree resolves without conflicts
@@ -319,7 +319,7 @@ description: |
   its separate repository, then publish to your Maven repository.
 
 reference_configuration: |
-  The parent POM (springboot-test-parent:2.0.0) contains:
+  The parent POM (springboot-test-parent:7.0.0) contains:
   
   <parent>
     <groupId>org.springframework.boot</groupId>
@@ -411,7 +411,7 @@ agent_instructions: |
   2. Environment variables GITHUB_ACTOR and GITHUB_TOKEN must be available
   3. In GitHub Actions, GITHUB_TOKEN is automatically available
   4. For automation/agents, use available GitHub credentials (e.g. MIGRATION_PAT or GITHUB_TOKEN)
-  5. Test with: mvn -s ~/.m2/settings.xml dependency:get -Dartifact=com.example:springboot-test-parent:2.0.0:pom
+  5. Test with: mvn -s ~/.m2/settings.xml dependency:get -Dartifact=com.example:springboot-test-parent:7.0.0:pom
   6. Compile with: mvn -s ~/.m2/settings.xml clean compile -DskipTests
   7. NEVER commit .mvn/settings.xml in the target repository
 ```
@@ -1260,7 +1260,7 @@ commands:
   maven: |
     # First, verify parent POM is resolvable
     mvn -s ~/.m2/settings.xml dependency:get \
-      -Dartifact=com.example:springboot-test-parent:2.0.0:pom \
+      -Dartifact=com.example:springboot-test-parent:7.0.0:pom \
       -DremoteRepositories=github::https://maven.pkg.github.com/OWNER/REPO
     
     # If successful, compile

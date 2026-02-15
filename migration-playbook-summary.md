@@ -4,6 +4,7 @@
 
 - **Full playbook:** [migration-playbook.md](migration-playbook.md) (same repo, same branch).
 - **Rules:** Process in order. Apply only to application code and child POMs. Do NOT modify parent POMs.
+- **Speed:** For fastest completion use scope **full** and do a single pass: apply all sections from this summary, then compile, test, generate MIGRATION_SUMMARY.md. Do not load the full playbook or validate per section.
 
 ---
 

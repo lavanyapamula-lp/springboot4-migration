@@ -348,9 +348,9 @@ phase_1_build_files() {
         log_rule "3.1" "Update Custom Parent Library version"
         if grep -q "springboot-test-parent" pom.xml 2>/dev/null; then
             if ! $DRY_RUN && ! $REPORT_ONLY; then
-                # Precisely targets your custom artifact and sets version to 2.0.0
-                perl -i -0pe "s|(<artifactId>springboot-test-parent</artifactId>\s*<version>).*?(</version>)|\${1}2.0.0\${2}|g" pom.xml
-                log_change "Custom Parent → 2.0.0"
+                # Precisely targets your custom artifact and sets version to 7.0.0
+                perl -i -0pe "s|(<artifactId>springboot-test-parent</artifactId>\s*<version>).*?(</version>)|\${1}7.0.0\${2}|g" pom.xml
+                log_change "Custom Parent → 7.0.0"
             fi
         fi
 

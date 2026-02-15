@@ -82,159 +82,73 @@ jobs:
             echo "Label '$NAME' already exists — OK"
           done
 
-          # 3. Create Maven settings template for GitHub Packages
-          cat > maven-settings-template.xml << 'SETTINGS_EOF'
-          <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">
-              <servers>
-                  <server>
-                      <id>github</id>
-                      <username>${env.GITHUB_ACTOR}</username>
-                      <password>${env.GITHUB_TOKEN}</password>
-                  </server>
-              </servers>
-
-              <profiles>
-                  <profile>
-                      <id>github</id>
-                      <repositories>
-                          <repository>
-                              <id>github</id>
-                              <url>https://maven.pkg.github.com/PARENT_OWNER/PARENT_REPO</url>
-                              <releases><enabled>true</enabled></releases>
-                              <snapshots>
-                                  <enabled>true</enabled>
-                                  <updatePolicy>always</updatePolicy>
-                              </snapshots>
-                          </repository>
-                      </repositories>
-                  </profile>
-              </profiles>
-
-              <activeProfiles>
-                  <activeProfile>github</activeProfile>
-              </activeProfiles>
-          </settings>
-          SETTINGS_EOF
-
-          # Replace placeholders with actual config values
-          sed -i "s|PARENT_OWNER|$PARENT_OWNER|g" maven-settings-template.xml
-          sed -i "s|PARENT_REPO|$PARENT_REPO|g" maven-settings-template.xml
-
-          # 4. Create comprehensive issue body with actual parent POM details
+          # 4. Create issue body (short to stay under 64k token limit with inlined playbook)
           cat > final-issue.md << ISSUE_EOF
           # Migration Task: Spring Boot 4 + Java 25
 
-          Please apply the following migration plan.
+          **For Copilot:** Use **only** the playbook inlined below. Do **not** fetch or load any other file. Single pass: apply rules from the playbook below, then compile, test, generate \`MIGRATION_SUMMARY.md\`.
 
-          ## 🔧 Setup Required Before Compilation
+          ## Setup (brief)
 
-          The parent POM must be resolved from GitHub Packages. **Before running \`mvn compile\`, create a temporary Maven settings file in runner home (do not commit it):**
+          Parent POM from GitHub Packages. Create \`~/.m2/settings.xml\` with server id=github (GITHUB_ACTOR, GITHUB_TOKEN) and repository \`https://maven.pkg.github.com/$PARENT_OWNER/$PARENT_REPO\`. Then: \`mvn dependency:get -Dartifact=$PARENT_GROUP_ID:$PARENT_ARTIFACT_ID:$PARENT_VERSION:pom\` and \`mvn clean compile\`.
 
-          **File: \`~/.m2/settings.xml\` (ephemeral, runtime only)**
+          **Parent:** $PARENT_GROUP_ID:$PARENT_ARTIFACT_ID:$PARENT_VERSION
 
-          \`\`\`xml
+          ## Required output
+
+          Create \`MIGRATION_SUMMARY.md\` in repo root: changed files, parent POM change, build/test results, skipped steps, risks.
           ISSUE_EOF
 
-          # Insert the settings template with actual values
-          cat maven-settings-template.xml >> final-issue.md
-
+          # 4b. Migration plan header
           cat >> final-issue.md << ISSUE_EOF2
-          \`\`\`
-
-          **Environment Variables Needed:**
-          - \`GITHUB_ACTOR\`: Your GitHub username (automatically set in GitHub Actions)
-          - \`GITHUB_TOKEN\`: Your GitHub token with \`read:packages\` permission (automatically available)
-
-          **Test parent POM resolution:**
-          \`\`\`bash
-          export GITHUB_ACTOR="your-username"
-          export GITHUB_TOKEN="ghp_your_token_here"
-          mvn dependency:get -Dartifact=$PARENT_GROUP_ID:$PARENT_ARTIFACT_ID:$PARENT_VERSION:pom
-          \`\`\`
-
-          If this succeeds, proceed with \`mvn -s ~/.m2/settings.xml clean compile\`.
-
-          **Parent POM Details (from config):**
-          - **GroupId**: $PARENT_GROUP_ID
-          - **ArtifactId**: $PARENT_ARTIFACT_ID
-          - **Version**: $PARENT_VERSION
-          - **GitHub Packages URL**: https://maven.pkg.github.com/$PARENT_OWNER/$PARENT_REPO
-
-          ## ✅ Required Output File
-
-          Create a file named **\`MIGRATION_SUMMARY.md\`** in the target repository root.
-
-          The summary must include:
-          1. Changed files list
-          2. Parent POM change details (old -> new)
-          3. Build commands executed and results
-          4. Test commands executed and results
-          5. Any skipped steps and reason
-          6. Known risks / manual follow-ups
-
-          If compilation/tests cannot run due to repository access/credentials, still create
-          \`MIGRATION_SUMMARY.md\` and document the exact failure and next action.
 
           ---
 
           ## Migration Plan
 
-          **Migration Scope: \`${{ inputs.migration_scope || 'full' }}\`**
+          **Scope: \`${{ inputs.migration_scope || 'full' }}\`**
 
           ISSUE_EOF2
 
-          # 5a. Add scope-specific instructions
+          # 5a. Add scope-specific instructions (single-pass to keep execution fast)
           SCOPE="${{ inputs.migration_scope || 'full' }}"
           case "$SCOPE" in
             full)
-              echo "Execute all 9 core phases (Sections 1–9) in order, then applicable conditional phases (C1–C7)." >> final-issue.md
+              echo "**Single pass:** Apply all Sections 1–9 from the playbook below (then C1–C7 if applicable). Then: compile, run tests, generate MIGRATION_SUMMARY.md." >> final-issue.md
               ;;
             build-files-only)
-              echo "Execute ONLY Sections 1–3 (Build Files & Parent POM, Java 25, Modularized Starters). Skip all other sections." >> final-issue.md
+              echo "**Single pass:** Apply ONLY Sections 1–3 from the playbook below. Then compile and generate MIGRATION_SUMMARY.md." >> final-issue.md
               ;;
             imports-only)
-              echo "Execute ONLY Sections 4–5 (Jackson 2→3, Spring Security Updates). Skip all other sections." >> final-issue.md
+              echo "**Single pass:** Apply ONLY Sections 4–5 from the playbook below. Then compile and generate MIGRATION_SUMMARY.md." >> final-issue.md
               ;;
             test-fixes-only)
-              echo "Execute ONLY Section 6 (Testing Modernization). Skip all other sections." >> final-issue.md
+              echo "**Single pass:** Apply ONLY Section 6 from the playbook below. Then run tests and generate MIGRATION_SUMMARY.md." >> final-issue.md
               ;;
             config-only)
-              echo "Execute ONLY Sections 7–8 (Config Property Renames, Removed & Deprecated APIs). Skip all other sections." >> final-issue.md
+              echo "**Single pass:** Apply ONLY Sections 7–8 from the playbook below. Then compile and generate MIGRATION_SUMMARY.md." >> final-issue.md
               ;;
             deploy-only)
-              echo "Execute ONLY Section 9 (Docker, CI/CD & Validation). Skip all other sections." >> final-issue.md
+              echo "**Single pass:** Apply ONLY Section 9 from the playbook below. Then generate MIGRATION_SUMMARY.md." >> final-issue.md
               ;;
             custom)
               echo "**Custom instructions:**" >> final-issue.md
               echo "${{ inputs.custom_instructions }}" >> final-issue.md
+              echo "Single pass: apply as above, then compile/test and generate MIGRATION_SUMMARY.md." >> final-issue.md
               ;;
           esac
           echo "" >> final-issue.md
 
-          # 5. Add playbook links (summary stays under 64k token limit; full is for reference)
-          PLAYBOOK_SUMMARY_BLOB="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/migration-playbook-summary.md"
+          # 5. Inline playbook summary (no fetch — keeps prompt under 64k tokens)
           PLAYBOOK_SUMMARY_RAW="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/raw/${GITHUB_REF_NAME}/migration-playbook-summary.md"
-          PLAYBOOK_FULL_BLOB="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/migration-playbook.md"
-          echo "Adding playbook links (summary + full)"
-          # Machine-parseable: automation can grep for PLAYBOOK_SUMMARY_RAW_URL to fetch the summary (stays under 64k tokens)
           echo "" >> final-issue.md
-          echo "PLAYBOOK_SUMMARY_RAW_URL=${PLAYBOOK_SUMMARY_RAW}" >> final-issue.md
+          echo "## Playbook (inlined — use this only; do not fetch any other file)" >> final-issue.md
           echo "" >> final-issue.md
-          cat >> final-issue.md << ISSUE_EOF3
+          cat migration-playbook-summary.md >> final-issue.md
+          echo "" >> final-issue.md
+          echo "---" >> final-issue.md
+          echo "*End of playbook. Apply rules above, then compile, test, generate MIGRATION_SUMMARY.md.*" >> final-issue.md
 
-          ## Playbook (use summary to stay under token/prompt limits)
-
-          **For automation / AI (64k token limit):** Use the **summary** only. The issue body contains a line \`PLAYBOOK_SUMMARY_RAW_URL=<url>\` — fetch that URL as the playbook content.
-          - View: ${PLAYBOOK_SUMMARY_BLOB}
-          - Raw: ${PLAYBOOK_SUMMARY_RAW}
-
-          **For full rule text (find/replace, validate):** Open when needed per section:
-          - Full playbook: ${PLAYBOOK_FULL_BLOB}
-
-          Use this branch (not main).
-          ISSUE_EOF3
-
-          # Expose summary URL for any automation that reads workflow outputs
           echo "playbook_summary_url=${PLAYBOOK_SUMMARY_RAW}" >> $GITHUB_OUTPUT
 
       - name: "🚀 Create Migration Issue"

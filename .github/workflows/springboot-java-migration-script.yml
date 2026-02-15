@@ -13,11 +13,11 @@ on:
       parent_branch:
         description: "Branch of the Parent POM"
         required: true
-        default: "migration-2.0.0" # 👈 The branch where 2.0.0-SNAPSHOT exists
+        default: "migration-7.0.0" # 👈 The branch where 7.0.0-SNAPSHOT exists
       parent_version:
         description: "New version of the Parent Library"
         required: true
-        default: "2.0.0-SNAPSHOT"
+        default: "7.0.0-SNAPSHOT"
 
 jobs:
   migrate:
@@ -61,7 +61,7 @@ jobs:
       - name: "📦 Update Custom Parent Library"
         working-directory: target-app
         run: |
-          # Updates 1.0.0 to 2.0.0-SNAPSHOT for your specific parent artifact
+          # Updates 1.0.0 to 7.0.0-SNAPSHOT for your specific parent artifact
           perl -i -0pe "s|(<artifactId>spring-boot-mongodb-parent</artifactId>\s*<version>).*?(</version>)|\${1}${PARENT_VERSION}\${2}|g" pom.xml
           echo "✅ Parent version forced to ${PARENT_VERSION}"
         env:
