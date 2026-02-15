@@ -145,9 +145,18 @@ jobs:
           
           ISSUE_EOF2
 
-          # 5. Append local playbook from the checked-out branch/ref
-          echo "Appending local migration-playbook.md from current workflow ref"
-          cat migration-playbook.md >> final-issue.md
+          # 5. Add branch-specific playbook links instead of embedding full file
+          PLAYBOOK_BLOB_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/migration-playbook.md"
+          PLAYBOOK_RAW_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/raw/${GITHUB_REF_NAME}/migration-playbook.md"
+          echo "Adding branch-specific playbook links: $PLAYBOOK_BLOB_URL"
+          cat >> final-issue.md << ISSUE_EOF3
+          
+          The full migration playbook is in this branch:
+          - View: ${PLAYBOOK_BLOB_URL}
+          - Raw: ${PLAYBOOK_RAW_URL}
+          
+          Use this branch-specific playbook (not main).
+          ISSUE_EOF3
 
       - name: "🚀 Create Migration Issue"
         env:
