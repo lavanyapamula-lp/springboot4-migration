@@ -1,15 +1,15 @@
 # Migration Playbook: Java 21 + Spring Boot 3 → Java 25 + Spring Boot 4
 
-> **Purpose**: Machine-readable migration playbook for use with GitHub Copilot, Copilot Workspace, or any AI-assisted code transformation tool. Each rule is self-contained with find/replace patterns, AST-level instructions, and validation criteria.
+> **Purpose**: Machine-readable migration playbook for manual use or any automation (scripts, CI, or AI-assisted tools). Each rule is self-contained with find/replace patterns, AST-level instructions, and validation criteria. No copilot-instructions or tool-specific files; this playbook is the single contract.
 >
-> **Usage**: Point Copilot at this file as context when performing migrations. Rules are tagged with priority, scope, and file-pattern globs so agents can filter relevant rules per file.
+> **Usage**: Follow the playbook when performing migrations (manually or via your chosen tooling). Rules are tagged with priority, scope, and file-pattern globs so you or your automation can filter relevant rules per file.
 >
 > ⚠️ **BEFORE STARTING**: Ensure prerequisites are met:
 > - Parent POM (if used) is published to Maven repository or local .m2
 > - Java 25 is installed and configured
 > - Repository structure is compatible
 >
-> 🤖 **FOR AGENTS**: This playbook applies to APPLICATION CODE ONLY.
+> 🤖 **FOR AUTOMATION / AGENTS**: This playbook applies to APPLICATION CODE ONLY.
 > - DO NOT create or modify parent POM files (they are external dependencies)
 > - ONLY update version references in child POMs
 
@@ -44,10 +44,10 @@
 
 ## 0. Meta — How to Use This Playbook
 
-### For Copilot / AI Agents
+### For Automation / Manual Use
 
 ```text
-INSTRUCTIONS FOR AI AGENT:
+INSTRUCTIONS (for manual use or automation):
 1. Read the entire playbook before making changes.
 2. Process rules in order (Section 1 → 18). Dependencies exist between sections.
 3. Each rule has:
@@ -57,7 +57,7 @@ INSTRUCTIONS FOR AI AGENT:
    - REPLACE: replacement pattern
    - VALIDATE: how to confirm the change is correct
 4. Rules marked [CONDITIONAL] only apply if the codebase uses that feature.
-5. Rules marked [MANUAL-REVIEW] require human verification after applying.
+5. Rules marked [MANUAL-REVIEW] require manual verification after applying.
 6. Do NOT apply rules to files under /test/resources/, /generated/, or /build/.
 7. After all rules: compile, run tests, report failures.
 
@@ -285,7 +285,7 @@ description: |
   The parent POM (springboot-test-parent) is managed externally and
   should NOT be modified as part of this migration.
   
-  If you are a human and need to update the parent POM itself, do so in
+  To update the parent POM itself (manual change), do so in
   its separate repository, then publish to your Maven repository.
 
 reference_configuration: |
@@ -380,7 +380,7 @@ agent_instructions: |
   1. Create temporary ~/.m2/settings.xml with GitHub Packages configuration
   2. Environment variables GITHUB_ACTOR and GITHUB_TOKEN must be available
   3. In GitHub Actions, GITHUB_TOKEN is automatically available
-  4. For GitHub Copilot agent, use available GitHub credentials
+  4. For automation/agents, use available GitHub credentials (e.g. MIGRATION_PAT or GITHUB_TOKEN)
   5. Test with: mvn -s ~/.m2/settings.xml dependency:get -Dartifact=com.example:springboot-test-parent:2.0.0:pom
   6. Compile with: mvn -s ~/.m2/settings.xml clean compile -DskipTests
   7. NEVER commit .mvn/settings.xml in the target repository
@@ -430,7 +430,7 @@ action: |
 
 note: |
   [CONDITIONAL]
-  If you are a GitHub Copilot agent and cannot access private Nexus:
+  If you are an automated agent and cannot access private Nexus:
   - Apply all migration rules
   - SKIP compilation (mvn compile)
   - Document in summary: "Compilation skipped - requires Nexus credentials"

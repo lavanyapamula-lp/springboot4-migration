@@ -1,4 +1,4 @@
-name: Copilot Migration Trigger
+name: Migration Trigger
 on:
   workflow_dispatch:
     inputs:
@@ -6,14 +6,14 @@ on:
         description: 'Target Repository (e.g., org/app-1)'
         required: true
         type: string
-        
+
 jobs:
-  trigger-copilot-migration:
+  create-migration-issue:
     runs-on: ubuntu-latest
     steps:
       - name: "📥 Checkout Migration Repository"
         uses: actions/checkout@v4
-        
+
       - name: "🏷️ Ensure Labels and Prepare Migration Issue"
         env:
           GH_TOKEN: ${{ secrets.MIGRATION_PAT }}
@@ -23,7 +23,7 @@ jobs:
 
           # 1. Load parent POM configuration from config file
           echo "Loading parent POM configuration..."
-          
+
           # Parse YAML config (using yq if available, fallback to grep/sed)
           if command -v yq &> /dev/null; then
             PARENT_OWNER=$(yq eval '.parent_pom.owner' config/parent-pom-config.yml)
@@ -39,7 +39,7 @@ jobs:
             PARENT_ARTIFACT_ID=$(grep "artifactId:" config/parent-pom-config.yml | sed 's/.*artifactId: *"\(.*\)".*/\1/')
             PARENT_VERSION=$(grep "version:" config/parent-pom-config.yml | head -1 | sed 's/.*version: *"\(.*\)".*/\1/')
           fi
-          
+
           echo "Parent POM Configuration:"
           echo "  Owner: $PARENT_OWNER"
           echo "  Repository: $PARENT_REPO"
@@ -71,7 +71,7 @@ jobs:
                       <password>${env.GITHUB_TOKEN}</password>
                   </server>
               </servers>
-              
+
               <profiles>
                   <profile>
                       <id>github</id>
@@ -88,7 +88,7 @@ jobs:
                       </repositories>
                   </profile>
               </profiles>
-              
+
               <activeProfiles>
                   <activeProfile>github</activeProfile>
               </activeProfiles>
@@ -102,47 +102,47 @@ jobs:
           # 4. Create comprehensive issue body with actual parent POM details
           cat > final-issue.md << ISSUE_EOF
           # Migration Task: Spring Boot 4 + Java 25
-          
+
           Please apply the following migration plan.
-          
+
           ## 🔧 Setup Required Before Compilation
-          
+
           The parent POM must be resolved from GitHub Packages. **Before running \`mvn compile\`, create a temporary Maven settings file in runner home (do not commit it):**
-          
+
           **File: \`~/.m2/settings.xml\` (ephemeral, runtime only)**
-          
+
           \`\`\`xml
           ISSUE_EOF
 
           # Insert the settings template with actual values
           cat maven-settings-template.xml >> final-issue.md
-          
+
           cat >> final-issue.md << ISSUE_EOF2
           \`\`\`
-          
+
           **Environment Variables Needed:**
           - \`GITHUB_ACTOR\`: Your GitHub username (automatically set in GitHub Actions)
           - \`GITHUB_TOKEN\`: Your GitHub token with \`read:packages\` permission (automatically available)
-          
+
           **Test parent POM resolution:**
           \`\`\`bash
           export GITHUB_ACTOR="your-username"
           export GITHUB_TOKEN="ghp_your_token_here"
           mvn dependency:get -Dartifact=$PARENT_GROUP_ID:$PARENT_ARTIFACT_ID:$PARENT_VERSION:pom
           \`\`\`
-          
+
           If this succeeds, proceed with \`mvn -s ~/.m2/settings.xml clean compile\`.
-          
+
           **Parent POM Details (from config):**
           - **GroupId**: $PARENT_GROUP_ID
           - **ArtifactId**: $PARENT_ARTIFACT_ID
           - **Version**: $PARENT_VERSION
           - **GitHub Packages URL**: https://maven.pkg.github.com/$PARENT_OWNER/$PARENT_REPO
-          
+
           ## ✅ Required Output File
-          
-          Create a file named **`MIGRATION_SUMMARY.md`** in the target repository root.
-          
+
+          Create a file named **\`MIGRATION_SUMMARY.md\`** in the target repository root.
+
           The summary must include:
           1. Changed files list
           2. Parent POM change details (old -> new)
@@ -150,26 +150,26 @@ jobs:
           4. Test commands executed and results
           5. Any skipped steps and reason
           6. Known risks / manual follow-ups
-          
+
           If compilation/tests cannot run due to repository access/credentials, still create
-          `MIGRATION_SUMMARY.md` and document the exact failure and next action.
-          
+          \`MIGRATION_SUMMARY.md\` and document the exact failure and next action.
+
           ---
-          
+
           ## Migration Plan
-          
+
           ISSUE_EOF2
 
-          # 5. Add branch-specific playbook links instead of embedding full file
+          # 5. Add branch-specific playbook links
           PLAYBOOK_BLOB_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${GITHUB_REF_NAME}/migration-playbook.md"
           PLAYBOOK_RAW_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/raw/${GITHUB_REF_NAME}/migration-playbook.md"
           echo "Adding branch-specific playbook links: $PLAYBOOK_BLOB_URL"
           cat >> final-issue.md << ISSUE_EOF3
-          
+
           The full migration playbook is in this branch:
           - View: ${PLAYBOOK_BLOB_URL}
           - Raw: ${PLAYBOOK_RAW_URL}
-          
+
           Use this branch-specific playbook (not main).
           ISSUE_EOF3
 

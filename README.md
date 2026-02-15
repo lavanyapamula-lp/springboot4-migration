@@ -1,12 +1,13 @@
 # Spring Boot 4 Migration Toolkit
 
-Minimal, playbook-driven migration toolkit for GitHub Copilot issue-based migrations.
+Minimal, playbook-driven migration toolkit for GitHub Copilot issue-based migrations. No copilot-instructions or Copilot-specific tooling; the playbook is the single source of truth and can be applied manually or with any automation.
 
 ## What This Repository Contains
 
-- `.github/workflows/copilot-migrate-repo.yml` - Workflow that creates a migration issue in the target repository.
+- `.github/workflows/migrate-repo.yml` - Workflow that creates a migration issue in the target repository.
 - `migration-playbook.md` - Canonical migration rules and validation steps.
 - `config/parent-pom-config.yml` - Parent POM coordinates and GitHub Packages source.
+- `SpringBoot4-Migration-Strategy-Slides.md` - Slide content for the migration strategy (use to build or update the deck).
 
 ## Standard Approach
 
@@ -36,10 +37,10 @@ parent_pom:
 ## Running a Migration
 
 1. Open Actions in this repository.
-2. Run `Copilot Migration Trigger`.
+2. Run **Migration Trigger** (workflow_dispatch).
 3. Provide `target_repository` (for example `your-org/your-app`).
 
-The workflow creates an issue in the target repository with migration instructions and a branch-specific playbook link.
+The workflow creates an issue in the target repository with migration instructions and a branch-specific playbook link. Perform the migration by following the playbook (manually or with your chosen tooling).
 
 ## Notes
 
