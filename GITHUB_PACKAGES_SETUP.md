@@ -130,7 +130,7 @@ parent_pom:
   repository: "springboot-test-parent"      # Parent POM repository
   groupId: "com.example"
   artifactId: "springboot-test-parent"
-  version: "2.0.0-SNAPSHOT"
+  version: "2.0.0"
 ```
 
 **Commit and push:**
@@ -179,7 +179,7 @@ export GITHUB_ACTOR="your-username"
 export GITHUB_TOKEN="ghp_your_token_here"
 
 # Test parent POM resolution
-mvn -s ~/.m2/settings.xml dependency:get -Dartifact=com.example:springboot-test-parent:2.0.0-SNAPSHOT:pom
+mvn -s ~/.m2/settings.xml dependency:get -Dartifact=com.example:springboot-test-parent:2.0.0:pom
 
 # Expected output:
 # Downloaded from github: https://maven.pkg.github.com/yourorg/springboot-test-parent/...
@@ -247,7 +247,7 @@ gh auth refresh -s read:packages
 
 # Test parent POM download
 export GITHUB_TOKEN=$(gh auth token)
-mvn dependency:get -Dartifact=com.example:springboot-test-parent:2.0.0-SNAPSHOT:pom
+mvn dependency:get -Dartifact=com.example:springboot-test-parent:2.0.0:pom
 ```
 
 ### Issue: "401 Unauthorized" from GitHub Packages

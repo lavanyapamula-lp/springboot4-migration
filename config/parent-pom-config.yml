@@ -16,7 +16,7 @@ parent_pom:
   artifactId: "springboot-test-parent"
   
   # Target version after migration
-  version: "2.0.0-SNAPSHOT"
+  version: "2.0.0"
   
   # GitHub Packages URL (constructed from owner/repository)
   # Format: https://maven.pkg.github.com/{owner}/{repository}

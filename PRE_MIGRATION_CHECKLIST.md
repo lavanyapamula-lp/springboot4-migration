@@ -14,7 +14,7 @@ The migration assumes your parent POM is **already migrated to Spring Boot 4** a
 
 **Requirements:**
 - Parent POM published to GitHub Packages: `https://maven.pkg.github.com/OWNER/REPO`
-- Version `2.0.0-SNAPSHOT` (or your migrated version) exists
+- Version `2.0.0` (or your migrated version) exists
 - Target repositories have GitHub token with `read:packages` permission
 
 **Verification:**
@@ -23,7 +23,7 @@ export GITHUB_ACTOR="your-username"
 export GITHUB_TOKEN="ghp_your_token_here"  # or use secrets.GITHUB_TOKEN in Actions
 
 mvn dependency:get \
-  -Dartifact=com.example:springboot-test-parent:2.0.0-SNAPSHOT:pom \
+  -Dartifact=com.example:springboot-test-parent:2.0.0:pom \
   -DremoteRepositories=github::https://maven.pkg.github.com/yourorg/springboot-test-parent
 ```
 
@@ -37,13 +37,13 @@ mvn dependency:get \
 
 **Requirements:**
 - Parent POM published to your organization's Maven repository
-- Version `2.0.0-SNAPSHOT` exists
+- Version `2.0.0` exists
 - Repository allows anonymous read OR credentials are configured
 
 **Verification:**
 ```bash
 mvn dependency:get \
-  -Dartifact=com.example:springboot-test-parent:2.0.0-SNAPSHOT:pom \
+  -Dartifact=com.example:springboot-test-parent:2.0.0:pom \
   -DremoteRepositories=nexus::https://nexus.yourcompany.com/repository/maven-snapshots/
 ```
 
@@ -79,7 +79,7 @@ Your migrated parent POM must:
 
 ### What the Agent Will Do:
 
-- ✅ **WILL**: Update parent version in child POM: `1.0.0-SNAPSHOT` → `2.0.0-SNAPSHOT`
+- ✅ **WILL**: Update parent version in child POM: `1.0.0-SNAPSHOT` → `2.0.0`
 - ❌ **WON'T**: Create or modify the parent POM file itself
 - ❌ **WON'T**: Try to install the parent POM to .m2
 
@@ -218,7 +218,7 @@ cd <target-repo>
 
 # Ensure parent POM is available
 mvn dependency:get \
-  -Dartifact=com.example:springboot-test-parent:2.0.0-SNAPSHOT:pom \
+  -Dartifact=com.example:springboot-test-parent:2.0.0:pom \
   -DremoteRepositories=<your-nexus-url>
 
 # Apply migration manually or via Copilot
@@ -269,7 +269,7 @@ After migration completes:
 **Solution:**
 1. Verify parent POM is published to your Maven repository
 2. Check `~/.m2/settings.xml` for correct repository configuration
-3. Try: `mvn dependency:get -Dartifact=com.example:springboot-test-parent:2.0.0-SNAPSHOT:pom`
+3. Try: `mvn dependency:get -Dartifact=com.example:springboot-test-parent:2.0.0:pom`
 
 ### "Agent Created Parent POM in Repository"
 

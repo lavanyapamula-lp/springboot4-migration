@@ -69,7 +69,7 @@ Before migrating any target repository, ensure:
 
 1. **Parent POM (if used)** is already migrated to Spring Boot 4 and published to **GitHub Packages**:
    - Published at: `https://maven.pkg.github.com/OWNER/REPO`
-   - Version: `2.0.0-SNAPSHOT` (or your target version)
+   - Version: `2.0.0` (or your target version)
    - **Why GitHub Packages?** The agent can authenticate using `GITHUB_TOKEN` automatically
    - See `GITHUB_PACKAGES_SETUP.md` for publishing instructions
 
@@ -112,7 +112,7 @@ parent_pom:
   repository: "springboot-test-parent" # Change to your parent POM repo
   groupId: "com.example"                   # Change to your groupId
   artifactId: "springboot-test-parent" # Change to your artifactId
-  version: "2.0.0-SNAPSHOT"                # Your migrated version
+  version: "2.0.0"                # Your migrated version
 ```
 
 **Commit this file:**
@@ -191,7 +191,7 @@ parent_pom:
   repository: "springboot-test-parent"      # Parent POM repo name
   groupId: "com.example"
   artifactId: "springboot-test-parent"
-  version: "2.0.0-SNAPSHOT"
+  version: "2.0.0"
 ```
 
 **This configuration is used automatically by all migration workflows.**
