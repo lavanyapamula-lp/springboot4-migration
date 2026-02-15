@@ -60,16 +60,17 @@ Token needs: `write:packages` permission
 
 ---
 
-### 2. Migration Workflow Creates `.mvn/settings.xml`
+### 2. Migration Workflow Creates Temporary `~/.m2/settings.xml`
 
 When the GitHub Copilot agent runs the migration:
 
 **Step 1: Apply Rule 3.2.1** (from migration-playbook.md)
-- Agent creates `.mvn/settings.xml` in the target repository
+- Agent creates temporary `~/.m2/settings.xml` in runner workspace
 - Configures GitHub Packages as Maven repository
 - Uses `GITHUB_TOKEN` for authentication
+- Does not commit settings file to target repository
 
-**File created: `.mvn/settings.xml`**
+**File created (ephemeral): `~/.m2/settings.xml`**
 
 ```xml
 <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">
@@ -104,14 +105,13 @@ When the GitHub Copilot agent runs the migration:
 </settings>
 ```
 
-**Step 2: Maven Automatically Uses `.mvn/settings.xml`**
-- Maven looks for `.mvn/settings.xml` in project root
-- Merges with user's `~/.m2/settings.xml`
+**Step 2: Maven Uses Explicit Settings File**
+- Build runs with `mvn -s ~/.m2/settings.xml ...`
 - GitHub Actions provides `GITHUB_TOKEN` automatically
 
 **Step 3: Compilation Succeeds**
 ```bash
-mvn clean compile -DskipTests
+mvn -s ~/.m2/settings.xml clean compile -DskipTests
 # Maven downloads parent POM from GitHub Packages
 # ✅ BUILD SUCCESS
 ```
@@ -152,7 +152,7 @@ The workflow now automatically reads from `config/parent-pom-config.yml`:
 3. Parent POM details are **automatically loaded** from config file
 4. Workflow creates issue with pre-configured Maven settings
 5. Copilot agent applies migration
-6. Agent creates `.mvn/settings.xml` pointing to your GitHub Packages URL
+6. Agent creates temporary `~/.m2/settings.xml` pointing to your GitHub Packages URL
 7. Agent compiles successfully ✅
 
 **No manual input needed** - everything comes from the config file!
@@ -167,19 +167,19 @@ The workflow now automatically reads from `config/parent-pom-config.yml`:
 # Navigate to a target project
 cd target-app
 
-# Create .mvn/settings.xml (copy from config/maven-settings-github-packages.xml)
-mkdir -p .mvn
-cp ../springboot4-migration/config/maven-settings-github-packages.xml .mvn/settings.xml
+# Create temporary settings.xml (copy from config/maven-settings-github-packages.xml)
+mkdir -p ~/.m2
+cp ../springboot4-migration/config/maven-settings-github-packages.xml ~/.m2/settings.xml
 
 # Update URL in settings.xml
-sed -i 's|OWNER/REPOSITORY|yourorg/springboot-test-parent|g' .mvn/settings.xml
+sed -i 's|OWNER/REPOSITORY|yourorg/springboot-test-parent|g' ~/.m2/settings.xml
 
 # Set environment variables
 export GITHUB_ACTOR="your-username"
 export GITHUB_TOKEN="ghp_your_token_here"
 
 # Test parent POM resolution
-mvn dependency:get -Dartifact=com.example:springboot-test-parent:2.0.0-SNAPSHOT:pom
+mvn -s ~/.m2/settings.xml dependency:get -Dartifact=com.example:springboot-test-parent:2.0.0-SNAPSHOT:pom
 
 # Expected output:
 # Downloaded from github: https://maven.pkg.github.com/yourorg/springboot-test-parent/...
@@ -222,7 +222,7 @@ jobs:
 **Key points:**
 - ✅ `GITHUB_TOKEN` is automatically available
 - ✅ `GITHUB_ACTOR` is set from `github.actor` context
-- ✅ `.mvn/settings.xml` created by migration uses these variables
+- ✅ Temporary `~/.m2/settings.xml` created at runtime uses these variables
 - ✅ Maven resolves parent POM from GitHub Packages
 
 ---
@@ -233,7 +233,7 @@ jobs:
 
 **Check:**
 1. Parent POM is published to GitHub Packages
-2. `.mvn/settings.xml` exists
+2. `~/.m2/settings.xml` exists
 3. `GITHUB_TOKEN` environment variable is set
 4. Token has `read:packages` permission
 
@@ -289,10 +289,10 @@ mvn clean deploy
 1. **Copilot Workflow Updated** (`.github/workflows/copilot-migrate-repo.yml`)
    - Takes parent POM owner/package as input
    - Creates Maven settings template in migration issue
-   - Instructs agent to create `.mvn/settings.xml`
+   - Instructs agent to create temporary `~/.m2/settings.xml`
 
 2. **Migration Playbook Updated** (`migration-playbook.md`)
-   - **Rule 3.2.1**: Create `.mvn/settings.xml` for GitHub Packages
+   - **Rule 3.2.1**: Create temporary `~/.m2/settings.xml` for GitHub Packages
    - **Rule 18.1**: Enhanced compilation check with GitHub Packages support
 
 3. **Template Created** (`config/maven-settings-github-packages.xml`)
@@ -308,8 +308,8 @@ mvn clean deploy
 
 ```
 1. Agent reads Rule 3.2.1 from migration playbook
-2. Agent creates .mvn/settings.xml pointing to GitHub Packages
-3. Agent runs: mvn clean compile -DskipTests
+2. Agent creates temporary ~/.m2/settings.xml pointing to GitHub Packages
+3. Agent runs: mvn -s ~/.m2/settings.xml clean compile -DskipTests
 4. Maven uses GITHUB_TOKEN (auto-available in GitHub)
 5. Maven downloads parent POM from GitHub Packages
 6. Compilation succeeds ✅
@@ -322,7 +322,7 @@ mvn clean deploy
 - [ ] Publish parent POM to GitHub Packages: `mvn deploy`
 - [ ] Verify it's accessible: `gh api orgs/YOURORG/packages/maven/springboot-test-parent`
 - [ ] Test workflow on a sample repository (only enter target repo name)
-- [ ] Verify agent creates `.mvn/settings.xml` correctly
+- [ ] Verify agent creates temporary `~/.m2/settings.xml` correctly
 - [ ] Confirm compilation succeeds in agent's environment
 
 ---

@@ -242,13 +242,13 @@ The workflow will:
    - Parent POM coordinates (groupId, artifactId, version)
 5. Copilot agent:
    - Applies migration rules
-   - Creates `.mvn/settings.xml` with your GitHub Packages configuration
+   - Creates temporary `~/.m2/settings.xml` in runner with your GitHub Packages configuration
    - Resolves parent POM from GitHub Packages using `GITHUB_TOKEN`
    - Compiles application successfully ✅
 6. Review the changes and create a PR
 
 **How Parent POM is Resolved:**
-- Agent creates `.mvn/settings.xml` pointing to: `https://maven.pkg.github.com/{owner}/{repository}`
+- Agent creates temporary `~/.m2/settings.xml` pointing to: `https://maven.pkg.github.com/{owner}/{repository}`
 - Maven uses `GITHUB_TOKEN` (auto-available in GitHub Actions)
 - Parent POM downloaded automatically
 - Compilation succeeds without manual configuration

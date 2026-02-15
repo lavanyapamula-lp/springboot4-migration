@@ -28,7 +28,7 @@ mvn dependency:get \
 ```
 
 **How Agent Will Compile:**
-1. Agent creates `.mvn/settings.xml` with GitHub Packages configuration (Rule 3.2.1)
+1. Agent creates temporary `~/.m2/settings.xml` with GitHub Packages configuration (Rule 3.2.1)
 2. Uses `GITHUB_TOKEN` for authentication (automatically available in GitHub Actions)
 3. Maven resolves parent POM from GitHub Packages
 4. Compilation succeeds ✅
@@ -54,7 +54,7 @@ mvn dependency:get \
 
 **To enable agent compilation:**
 - Configure Nexus to allow anonymous read access for parent POM repository, OR
-- Add `.mvn/settings.xml` to target repositories with Nexus configuration (Rule 3.2.2)
+- Create temporary `~/.m2/settings.xml` during build with Nexus configuration (Rule 3.2.2)
 
 #### Option C: Local .m2 (For Development/Testing Only)
 

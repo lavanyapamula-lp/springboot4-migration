@@ -318,7 +318,7 @@ agent_instructions: |
 ### Rule 3.2.1 — Configure Maven to Resolve Parent POM from GitHub Packages
 
 ```yaml
-scope: "**/.mvn/settings.xml"
+scope: "Runtime Maven configuration (~/.m2/settings.xml or mvn -s)"
 priority: CRITICAL
 condition: "Parent POM is published to GitHub Packages"
 description: |
@@ -326,7 +326,8 @@ description: |
   This enables compilation and testing during migration in GitHub environments.
 
 action: |
-  CREATE file: .mvn/settings.xml
+  CREATE temporary file during build: ~/.m2/settings.xml
+  DO NOT commit settings.xml to target repository.
   
   <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0"
             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -376,17 +377,19 @@ validation: |
 
 agent_instructions: |
   REQUIRED STEP before running mvn compile:
-  1. Create .mvn/settings.xml with GitHub Packages configuration
+  1. Create temporary ~/.m2/settings.xml with GitHub Packages configuration
   2. Environment variables GITHUB_ACTOR and GITHUB_TOKEN must be available
   3. In GitHub Actions, GITHUB_TOKEN is automatically available
   4. For GitHub Copilot agent, use available GitHub credentials
-  5. Test with: mvn dependency:get -Dartifact=com.example:springboot-test-parent:2.0.0-SNAPSHOT:pom
+  5. Test with: mvn -s ~/.m2/settings.xml dependency:get -Dartifact=com.example:springboot-test-parent:2.0.0-SNAPSHOT:pom
+  6. Compile with: mvn -s ~/.m2/settings.xml clean compile -DskipTests
+  7. NEVER commit .mvn/settings.xml in the target repository
 ```
 
 ### Rule 3.2.2 — Alternative: Configure Nexus Repository
 
 ```yaml
-scope: "**/.mvn/settings.xml"
+scope: "Runtime Maven configuration (~/.m2/settings.xml or mvn -s)"
 priority: CRITICAL
 condition: "Parent POM is published to private Nexus/Artifactory"
 description: |
@@ -394,7 +397,8 @@ description: |
   configure Maven to access it.
 
 action: |
-  CREATE file: .mvn/settings.xml
+  CREATE temporary file during build: ~/.m2/settings.xml
+  DO NOT commit settings.xml to target repository.
   
   <settings xmlns="http://maven.apache.org/SETTINGS/1.0.0">
       <servers>
@@ -1472,19 +1476,19 @@ description: |
   
   AGENT INSTRUCTIONS:
   Before running mvn compile, ensure parent POM can be resolved:
-  1. Check if .mvn/settings.xml exists (created in Rule 3.2.1 or 3.2.2)
+  1. Check if runtime settings exists (~/.m2/settings.xml) or pass -s to Maven
   2. Verify GITHUB_TOKEN or NEXUS credentials are available
   3. If parent POM resolution fails, SKIP compilation and document this
 
 commands:
   maven: |
     # First, verify parent POM is resolvable
-    mvn dependency:get \
+    mvn -s ~/.m2/settings.xml dependency:get \
       -Dartifact=com.example:springboot-test-parent:2.0.0-SNAPSHOT:pom \
       -DremoteRepositories=github::https://maven.pkg.github.com/OWNER/REPO
     
     # If successful, compile
-    mvn clean compile -DskipTests
+    mvn -s ~/.m2/settings.xml clean compile -DskipTests
     
   gradle: "./gradlew clean compileJava"
   
@@ -1492,7 +1496,7 @@ expected: "BUILD SUCCESS with zero errors"
 
 on_failure: |
   ERROR: "Could not resolve parent POM"
-  → Check .mvn/settings.xml exists
+  → Check ~/.m2/settings.xml exists (or provide valid file with -s)
   → Verify GITHUB_TOKEN environment variable is set
   → Try: export GITHUB_TOKEN="${{ secrets.GITHUB_TOKEN }}"
   → If still fails and you are an agent, SKIP and document:
@@ -1508,7 +1512,7 @@ agent_instructions: |
   If running in GitHub environment:
   1. GITHUB_TOKEN is available as environment variable
   2. GITHUB_ACTOR is your GitHub username
-  3. Create .mvn/settings.xml before compiling (Rule 3.2.1)
+  3. Create temporary ~/.m2/settings.xml before compiling (Rule 3.2.1)
   4. Run compilation
   5. If parent POM resolution fails despite settings, SKIP compilation gracefully
 ```

@@ -2,7 +2,7 @@
 # 
 # Configure your organization's parent POM details here.
 # The Copilot migration workflow will automatically use these settings
-# when creating .mvn/settings.xml for GitHub Packages resolution.
+# when creating temporary ~/.m2/settings.xml for GitHub Packages resolution.
 
 parent_pom:
   # GitHub organization or user that owns the parent POM repository

@@ -107,9 +107,9 @@ jobs:
           
           ## 🔧 Setup Required Before Compilation
           
-          The parent POM must be resolved from GitHub Packages. **Before running \`mvn compile\`, create this file:**
+          The parent POM must be resolved from GitHub Packages. **Before running \`mvn compile\`, create a temporary Maven settings file in runner home (do not commit it):**
           
-          **File: \`.mvn/settings.xml\`**
+          **File: \`~/.m2/settings.xml\` (ephemeral, runtime only)**
           
           \`\`\`xml
           ISSUE_EOF
@@ -131,7 +131,7 @@ jobs:
           mvn dependency:get -Dartifact=$PARENT_GROUP_ID:$PARENT_ARTIFACT_ID:$PARENT_VERSION:pom
           \`\`\`
           
-          If this succeeds, proceed with \`mvn clean compile\`.
+          If this succeeds, proceed with \`mvn -s ~/.m2/settings.xml clean compile\`.
           
           **Parent POM Details (from config):**
           - **GroupId**: $PARENT_GROUP_ID

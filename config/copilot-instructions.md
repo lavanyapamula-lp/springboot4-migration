@@ -39,12 +39,14 @@ Parent POMs are external artifacts managed separately and published to:
 
 ### 🔧 Before Compilation: Configure Maven Repository Access
 
-**CRITICAL**: Create `.mvn/settings.xml` to resolve parent POM from GitHub Packages:
+**CRITICAL**: Create temporary `~/.m2/settings.xml` to resolve parent POM from GitHub Packages:
 
-1. Create file: `.mvn/settings.xml`
+1. Create file: `~/.m2/settings.xml` at runtime (ephemeral)
 2. Use template from: `config/maven-settings-github-packages.xml`
 3. Replace `OWNER/REPOSITORY` with actual GitHub org/repo
 4. Ensure `GITHUB_TOKEN` environment variable is available
+5. Run Maven with explicit settings: `mvn -s ~/.m2/settings.xml clean compile`
+6. Do **not** commit `.mvn/settings.xml` into the target repository
 
 **Example:**
 ```xml

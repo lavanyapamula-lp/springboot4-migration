@@ -6,7 +6,8 @@
         Maven Settings for GitHub Packages
         
         This file enables Maven to resolve the parent POM from GitHub Packages.
-        Place this file at: .mvn/settings.xml in your project root.
+        Use this as a runtime-only settings file at: ~/.m2/settings.xml
+        Do not commit .mvn/settings.xml into target repositories.
         
         Environment variables required:
         - GITHUB_ACTOR: Your GitHub username (automatically set in GitHub Actions)
