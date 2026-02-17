@@ -10,6 +10,7 @@ parent_pom:
   
   # Repository name where parent POM is published
   repository: "springboot-test-parent"
+  branch: "sb4-java25"
   
   # Maven coordinates
   groupId: "com.example"

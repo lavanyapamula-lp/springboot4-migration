@@ -6,18 +6,6 @@ on:
       target_repo:
         description: "Repo to migrate (org/repo)"
         required: true
-      parent_repo:
-        description: "Repository for the Parent POM"
-        required: true
-        default: "lavanyapamula-lp/springboot-test-parent" # 👈 Adjust this to your actual parent repo
-      parent_branch:
-        description: "Branch of the Parent POM"
-        required: true
-        default: "migration-7.0.0" # 👈 The branch where 7.0.0-SNAPSHOT exists
-      parent_version:
-        description: "New version of the Parent Library"
-        required: true
-        default: "7.0.0-SNAPSHOT"
 
 jobs:
   migrate:
@@ -28,11 +16,32 @@ jobs:
         with:
           path: migration-toolkit
 
+      - name: Load Parent POM config
+        id: parent-config
+        run: |
+          CONFIG="migration-toolkit/config/parent-pom-config.yml"
+          if command -v yq &> /dev/null; then
+            PARENT_OWNER=$(yq eval '.parent_pom.owner' "$CONFIG")
+            PARENT_REPO=$(yq eval '.parent_pom.repository' "$CONFIG")
+            PARENT_BRANCH=$(yq eval '.parent_pom.branch' "$CONFIG")
+            PARENT_VERSION=$(yq eval '.parent_pom.version' "$CONFIG")
+          else
+            PARENT_OWNER=$(grep "owner:" "$CONFIG" | sed 's/.*owner: *"\(.*\)".*/\1/')
+            PARENT_REPO=$(grep "repository:" "$CONFIG" | sed 's/.*repository: *"\(.*\)".*/\1/')
+            PARENT_BRANCH=$(grep "branch:" "$CONFIG" | sed 's/.*branch: *"\(.*\)".*/\1/')
+            PARENT_VERSION=$(grep "version:" "$CONFIG" | head -1 | sed 's/.*version: *"\(.*\)".*/\1/')
+          fi
+
+          echo "parent_owner=$PARENT_OWNER" >> "$GITHUB_OUTPUT"
+          echo "parent_repo=$PARENT_REPO" >> "$GITHUB_OUTPUT"
+          echo "parent_branch=$PARENT_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "parent_version=$PARENT_VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Checkout Parent Library
         uses: actions/checkout@v4
         with:
-          repository: ${{ inputs.parent_repo }}
-          ref: ${{ inputs.parent_branch }}
+          repository: ${{ steps.parent-config.outputs.parent_owner }}/${{ steps.parent-config.outputs.parent_repo }}
+          ref: ${{ steps.parent-config.outputs.parent_branch }}
           token: ${{ secrets.PAT_TOKEN }}
           path: parent-library
 
@@ -57,36 +66,52 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      # ── STEP 1: Update Parent Reference ────────────────────────────────
-      - name: "📦 Update Custom Parent Library"
-        working-directory: target-app
-        run: |
-          # Updates 1.0.0 to 7.0.0-SNAPSHOT for your specific parent artifact
-          perl -i -0pe "s|(<artifactId>spring-boot-mongodb-parent</artifactId>\s*<version>).*?(</version>)|\${1}${PARENT_VERSION}\${2}|g" pom.xml
-          echo "✅ Parent version forced to ${PARENT_VERSION}"
-        env:
-          PARENT_VERSION: ${{ inputs.parent_version }}
-
-      # ── STEP 2: OpenRewrite (AST Transformation) ─────────────────────
+      # ── STEP 1: OpenRewrite (AST Transformation) ─────────────────────
       - name: Run OpenRewrite
         working-directory: target-app
         run: |
+          echo "Using OpenRewrite config from migration toolkit"
           mvn -U org.openrewrite.maven:rewrite-maven-plugin:run \
             -Drewrite.recipeArtifactCoordinates=org.openrewrite.recipe:rewrite-spring:LATEST \
-            -Drewrite.activeRecipes=org.openrewrite.java.spring.boot3.UpgradeSpringBoot_3_3
+            -Drewrite.configLocation=../migration-toolkit/openrewrite-config.yml \
+            -Drewrite.activeRecipes=com.lavanya.migration.SpringBoot4Java25
 
-      # ── STEP 3: Run migrate.sh (playbook / phases) ───────────────────
+      # ── STEP 2: Run migrate.sh (playbook / phases + parent update) ───
       - name: "📖 Run migrate.sh"
         working-directory: target-app
         run: |
           chmod +x ../migration-toolkit/migrate.sh
           ../migration-toolkit/migrate.sh
 
-      - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v6
-        with:
-          path: target-app
-          token: ${{ secrets.PAT_TOKEN }}
-          commit-message: "chore: migrate to Spring Boot 4 and Java 25"
-          title: "🚀 Migration: Spring Boot 4 / Java 25"
-          body: "Updated parent to ${{ inputs.parent_version }} and applied playbook rules."
+      - name: Create Pull Request (native git + gh)
+        working-directory: target-app
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+        run: |
+          set -e
+
+          # Create a deterministic migration branch for this run.
+          BRANCH="chore/migrate-sb4-java25-${GITHUB_RUN_ID}"
+          git checkout -b "$BRANCH"
+
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes detected after migration. Skipping PR creation."
+            exit 0
+          fi
+
+          git -c user.name="github-actions[bot]" -c user.email="github-actions[bot]@users.noreply.github.com" \
+            commit -m "chore: migrate to Spring Boot 4 and Java 25"
+          git push -u origin "$BRANCH"
+
+          BASE_BRANCH="$(git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null | sed 's@^refs/remotes/origin/@@' || true)"
+          if [ -z "$BASE_BRANCH" ]; then
+            BASE_BRANCH="main"
+          fi
+
+          gh pr create \
+            --repo "${{ inputs.target_repo }}" \
+            --head "$BRANCH" \
+            --base "$BASE_BRANCH" \
+            --title "🚀 Migration: Spring Boot 4 / Java 25" \
+            --body "Updated parent to ${{ steps.parent-config.outputs.parent_version }} and applied playbook rules."
