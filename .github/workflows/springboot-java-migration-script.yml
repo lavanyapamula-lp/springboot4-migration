@@ -42,7 +42,7 @@ jobs:
         with:
           repository: ${{ steps.parent-config.outputs.parent_owner }}/${{ steps.parent-config.outputs.parent_repo }}
           ref: ${{ steps.parent-config.outputs.parent_branch }}
-          token: ${{ secrets.PAT_TOKEN }}
+          token: ${{ secrets.MIGRATION_PAT }}
           path: parent-library
 
       # ── NEW STEP: Install Parent Library Locally ───────────────────────
@@ -56,7 +56,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ inputs.target_repo }}
-          token: ${{ secrets.PAT_TOKEN }}
+          token: ${{ secrets.MIGRATION_PAT }}
           path: target-app
 
       - name: Setup Java 25
@@ -86,7 +86,7 @@ jobs:
       - name: Create Pull Request (native git + gh)
         working-directory: target-app
         env:
-          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
+          GH_TOKEN: ${{ secrets.MIGRATION_PAT }}
         run: |
           set -e
 
