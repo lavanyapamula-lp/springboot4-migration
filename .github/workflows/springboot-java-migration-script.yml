@@ -66,7 +66,15 @@ jobs:
           distribution: 'temurin'
           cache: 'maven'
 
-      # ── STEP 1: OpenRewrite (AST Transformation) ─────────────────────
+      # ── STEP 1: Align build files first (parent/version/etc.) ─────────
+      # This ensures Maven can resolve the parent POM before OpenRewrite.
+      - name: "📖 Run migrate.sh (phase 1)"
+        working-directory: target-app
+        run: |
+          chmod +x ../migration-toolkit/migrate.sh
+          ../migration-toolkit/migrate.sh --phase 1
+
+      # ── STEP 2: OpenRewrite (AST Transformation) ─────────────────────
       - name: Run OpenRewrite
         working-directory: target-app
         run: |
@@ -76,12 +84,12 @@ jobs:
             -Drewrite.configLocation=../migration-toolkit/openrewrite-config.yml \
             -Drewrite.activeRecipes=com.lavanya.migration.SpringBoot4Java25
 
-      # ── STEP 2: Run migrate.sh (playbook / phases + parent update) ───
-      - name: "📖 Run migrate.sh"
+      # ── STEP 3: Run remaining scripted migration phases ───────────────
+      - name: "📖 Run migrate.sh (phases 2-7)"
         working-directory: target-app
         run: |
           chmod +x ../migration-toolkit/migrate.sh
-          ../migration-toolkit/migrate.sh
+          ../migration-toolkit/migrate.sh --phase 2-7
 
       - name: Create Pull Request (native git + gh)
         working-directory: target-app
