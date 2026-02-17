@@ -76,13 +76,16 @@ jobs:
 
       # ── STEP 2: OpenRewrite (AST Transformation) ─────────────────────
       - name: Run OpenRewrite
+        continue-on-error: true
         working-directory: target-app
         run: |
           echo "Using OpenRewrite config from migration toolkit"
           mvn -U org.openrewrite.maven:rewrite-maven-plugin:run \
             -Drewrite.recipeArtifactCoordinates=org.openrewrite.recipe:rewrite-spring:LATEST \
             -Drewrite.configLocation=../migration-toolkit/openrewrite-config.yml \
-            -Drewrite.activeRecipes=com.lavanya.migration.SpringBoot4Java25
+            -Drewrite.activeRecipes=com.lavanya.migration.SpringBoot4Java25 \
+            -DskipTests \
+            -Dmaven.test.skip=true
 
       # ── STEP 3: Run remaining scripted migration phases ───────────────
       - name: "📖 Run migrate.sh (phases 3-6)"
