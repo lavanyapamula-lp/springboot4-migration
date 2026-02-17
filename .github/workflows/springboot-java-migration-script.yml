@@ -85,11 +85,20 @@ jobs:
             -Drewrite.activeRecipes=com.lavanya.migration.SpringBoot4Java25
 
       # ── STEP 3: Run remaining scripted migration phases ───────────────
-      - name: "📖 Run migrate.sh (phases 3-7)"
+      - name: "📖 Run migrate.sh (phases 3-6)"
         working-directory: target-app
         run: |
           chmod +x ../migration-toolkit/migrate.sh
-          ../migration-toolkit/migrate.sh --phase 3-7
+          ../migration-toolkit/migrate.sh --phase 3-6
+
+      # ── STEP 4: Validation report only (non-blocking) ─────────────────
+      # Known Java 25 removals (e.g., Thread.suspend/resume) are surfaced
+      # for manual remediation, but should not block PR creation.
+      - name: "🔎 Run migration validation (report only)"
+        working-directory: target-app
+        run: |
+          chmod +x ../migration-toolkit/migrate.sh
+          ../migration-toolkit/migrate.sh --phase 7 --report-only
 
       - name: Create Pull Request (native git + gh)
         working-directory: target-app
