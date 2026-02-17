@@ -29,6 +29,8 @@ JAVA_VERSION="25"
 GRADLE_MIN_VERSION="8.14"
 DOCKER_BASE_IMAGE="eclipse-temurin:25-jre-noble"
 MIGRATION_BRANCH="feat/migrate-springboot4-java25"
+CUSTOM_PARENT_ARTIFACT_ID="${CUSTOM_PARENT_ARTIFACT_ID:-springboot-test-parent}"
+CUSTOM_PARENT_VERSION="${CUSTOM_PARENT_VERSION:-7.0.0}"
 
 # Colors
 RED='\033[0;31m'
@@ -119,6 +121,34 @@ log_success() {
 
 log_fail() {
     echo -e "  ${RED}✘ $1${NC}"
+}
+
+load_parent_config() {
+    local script_dir config_file artifact_id version
+    script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    config_file="${PARENT_CONFIG_FILE:-$script_dir/config/parent-pom-config.yml}"
+
+    if [[ ! -f "$config_file" ]]; then
+        log_info "Parent config not found at $config_file; using defaults/env"
+        return
+    fi
+
+    if command -v yq &>/dev/null; then
+        artifact_id="$(yq eval '.parent_pom.artifactId' "$config_file" 2>/dev/null || true)"
+        version="$(yq eval '.parent_pom.version' "$config_file" 2>/dev/null || true)"
+    else
+        artifact_id="$(grep "artifactId:" "$config_file" | head -1 | sed 's/.*artifactId: *"\(.*\)".*/\1/' || true)"
+        version="$(grep "version:" "$config_file" | head -1 | sed 's/.*version: *"\(.*\)".*/\1/' || true)"
+    fi
+
+    if [[ -n "${artifact_id:-}" && "$artifact_id" != "null" ]]; then
+        CUSTOM_PARENT_ARTIFACT_ID="$artifact_id"
+    fi
+    if [[ -n "${version:-}" && "$version" != "null" ]]; then
+        CUSTOM_PARENT_VERSION="$version"
+    fi
+
+    log_info "Parent config loaded: artifactId=$CUSTOM_PARENT_ARTIFACT_ID, version=$CUSTOM_PARENT_VERSION"
 }
 
 # Safe sed that works on both macOS (BSD) and Linux (GNU)
@@ -346,11 +376,11 @@ phase_1_build_files() {
 
         # ── Rule 3.1: Custom Parent Library ──────────────────────
         log_rule "3.1" "Update Custom Parent Library version"
-        if grep -q "springboot-test-parent" pom.xml 2>/dev/null; then
+        if grep -q "<artifactId>${CUSTOM_PARENT_ARTIFACT_ID}</artifactId>" pom.xml 2>/dev/null; then
             if ! $DRY_RUN && ! $REPORT_ONLY; then
-                # Precisely targets your custom artifact and sets version to 7.0.0
-                perl -i -0pe "s|(<artifactId>springboot-test-parent</artifactId>\s*<version>).*?(</version>)|\${1}7.0.0\${2}|g" pom.xml
-                log_change "Custom Parent → 7.0.0"
+                # Targets custom artifactId and updates only its version node.
+                perl -i -0pe "s|(<artifactId>\Q${CUSTOM_PARENT_ARTIFACT_ID}\E</artifactId>\s*<version>).*?(</version>)|\${1}${CUSTOM_PARENT_VERSION}\${2}|g" pom.xml
+                log_change "Custom Parent ${CUSTOM_PARENT_ARTIFACT_ID} → ${CUSTOM_PARENT_VERSION}"
             fi
         fi
 
@@ -1088,6 +1118,7 @@ phase_7_validation() {
 
 main() {
     log_header "MIGRATION: Java 21/Spring Boot 3 → Java 25/Spring Boot 4"
+    load_parent_config
 
     if $DRY_RUN; then
         echo -e "${YELLOW}  *** DRY RUN MODE — No files will be modified ***${NC}"
